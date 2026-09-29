@@ -45,6 +45,16 @@ static void label_one_line(lv_obj_t *l)
     lv_obj_set_height(l, lv_font_get_line_height(lv_obj_get_style_text_font(l, LV_PART_MAIN)));
 }
 
+/* create_button() colours its label directly, which beats any text colour set
+ * on the button itself.  For buttons that change text colour with their state
+ * (dark on the accent fill, dim when disabled), drop the label's own colour so
+ * it follows the button. */
+static void button_text_follows_state(lv_obj_t *b)
+{
+    lv_obj_t *l = lv_obj_get_child(b, 0);
+    if (l != NULL) lv_obj_remove_local_style_prop(l, LV_STYLE_TEXT_COLOR, LV_PART_MAIN);
+}
+
 static QueueHandle_t lyrion_command_queue = NULL;
 
 

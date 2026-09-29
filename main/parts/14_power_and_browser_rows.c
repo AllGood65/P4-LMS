@@ -1011,6 +1011,7 @@ static void source_select_create(lv_obj_t *nav_bar)
             lv_obj_set_style_bg_color(b, lv_color_hex(UI_ACCENT), LV_PART_MAIN);
             lv_obj_set_style_text_color(b, lv_color_hex(UI_ON_ACCENT), LV_PART_MAIN);
             lv_obj_set_style_text_color(b, lv_color_hex(UI_TEXT_DIM), LV_PART_MAIN | LV_STATE_DISABLED);
+            button_text_follows_state(b);
         }
     }
     lv_obj_add_flag(source_select_bar, LV_OBJ_FLAG_HIDDEN);

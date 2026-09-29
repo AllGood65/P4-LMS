@@ -729,6 +729,7 @@ static void create_source_browser(lv_obj_t *screen)
      * with the state: dark on the accent colour, dim when greyed out. */
     lv_obj_set_style_text_color(source_prev_button, lv_color_hex(UI_ON_ACCENT), LV_PART_MAIN);
     lv_obj_set_style_text_color(source_prev_button, lv_color_hex(UI_TEXT_SOFT), LV_PART_MAIN | LV_STATE_DISABLED);
+    button_text_follows_state(source_prev_button);
     lv_obj_add_state(source_prev_button, LV_STATE_DISABLED);
 
     source_page_label = lv_label_create(source_nav_bar);
@@ -748,6 +749,7 @@ static void create_source_browser(lv_obj_t *screen)
      * with the state: dark on the accent colour, dim when greyed out. */
     lv_obj_set_style_text_color(source_next_button, lv_color_hex(UI_ON_ACCENT), LV_PART_MAIN);
     lv_obj_set_style_text_color(source_next_button, lv_color_hex(UI_TEXT_SOFT), LV_PART_MAIN | LV_STATE_DISABLED);
+    button_text_follows_state(source_next_button);
     lv_obj_add_state(source_next_button, LV_STATE_DISABLED);
 
     source_select_create(source_nav_bar);

@@ -221,6 +221,7 @@ static void ss_wall_create(lv_obj_t *overlay)
     lv_obj_set_style_radius(ss_wall_caption, 12, 0);
     lv_obj_set_style_pad_ver(ss_wall_caption, 10, 0);
     lv_obj_set_style_pad_hor(ss_wall_caption, 16, 0);
+    lv_obj_set_height(ss_wall_caption, lv_font_get_line_height(&p4_font_18) + 20);   /* one line + padding */
     lv_obj_set_pos(ss_wall_caption, (1024 - 520) / 2, 600 - 70);
     lv_obj_add_flag(ss_wall_caption, LV_OBJ_FLAG_HIDDEN);
 
@@ -368,6 +369,7 @@ static lv_obj_t *ss_new_label(lv_obj_t *parent, const lv_font_t *font, uint32_t 
     if (w > 0) {
         lv_obj_set_width(l, w);
         lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
+        label_one_line(l);
     }
     lv_obj_set_pos(l, x, y);
     return l;
@@ -397,6 +399,7 @@ static void ss_big_create(lv_obj_t *overlay)
     lv_obj_set_style_pad_row(col, 8, 0);
     ss_big_title = ss_new_label(col, &p4_font_48, UI_TEXT, 0, 0, 884);
     lv_label_set_long_mode(ss_big_title, LV_LABEL_LONG_WRAP);
+    lv_obj_set_height(ss_big_title, LV_SIZE_CONTENT);
     lv_obj_set_style_max_height(ss_big_title, 2 * lv_font_get_line_height(&p4_font_48), 0);
     lv_obj_set_style_pad_bottom(ss_big_title, 6, 0);
     ss_big_artist = ss_new_label(col, &p4_font_28, UI_TEXT_SOFT, 0, 0, 884);

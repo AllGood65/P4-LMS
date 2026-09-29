@@ -375,6 +375,7 @@ static lv_obj_t *alarm_label(lv_obj_t *parent, const char *text, const lv_font_t
     if (w > 0) {
         lv_obj_set_width(l, w);
         lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
+        label_one_line(l);
     }
     lv_obj_set_pos(l, x, y);
     return l;
@@ -787,6 +788,7 @@ static void alarm_editor_create(lv_obj_t *screen)
     aed_pl_name = lv_obj_get_child(aed_pl_field, 0);
     lv_obj_set_width(aed_pl_name, 440);
     lv_label_set_long_mode(aed_pl_name, LV_LABEL_LONG_DOT);
+    label_one_line(aed_pl_name);
     lv_obj_align(aed_pl_name, LV_ALIGN_LEFT_MID, 18, 0);
     lv_obj_t *ch = lv_label_create(aed_pl_field);
     lv_label_set_text(ch, "CHOOSE  " LV_SYMBOL_RIGHT);

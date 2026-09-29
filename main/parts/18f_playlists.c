@@ -66,6 +66,7 @@ static void pl_picker_create(void)
     pl_picker_what = modal_text(pl_picker_panel, "", &p4_font_16, UI_TEXT_SOFT, 26, 60);
     lv_obj_set_width(pl_picker_what, 590);
     lv_label_set_long_mode(pl_picker_what, LV_LABEL_LONG_DOT);
+    label_one_line(pl_picker_what);
 
     pl_picker_list = lv_obj_create(pl_picker_panel);
     lv_obj_remove_style_all(pl_picker_list);

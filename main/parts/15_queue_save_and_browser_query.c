@@ -346,6 +346,7 @@ static void source_render_grid(void)
         lv_obj_set_width(title, SOURCE_GRID_COVER + 4);
         lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
         lv_obj_set_style_text_font(title, &p4_font_14, 0);
+        label_one_line(title);
         lv_obj_set_style_text_color(title, lv_color_hex(UI_TEXT), 0);
         lv_obj_set_pos(title, 14, SOURCE_GRID_COVER + 4);
 
@@ -354,6 +355,7 @@ static void source_render_grid(void)
         lv_obj_set_width(artist, SOURCE_GRID_COVER + 4);
         lv_label_set_long_mode(artist, LV_LABEL_LONG_DOT);
         lv_obj_set_style_text_font(artist, &p4_font_14, 0);
+        label_one_line(artist);
         lv_obj_set_style_text_color(artist, lv_color_hex(UI_TEXT_SOFT), 0);
         lv_obj_set_pos(artist, 14, SOURCE_GRID_COVER + 20);
 

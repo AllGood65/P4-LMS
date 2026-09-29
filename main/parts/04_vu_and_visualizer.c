@@ -1798,6 +1798,7 @@ static void create_visualizer(lv_obj_t *screen)
     lv_label_set_long_mode(visualizer_track_label, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_color(visualizer_track_label, lv_color_hex(UI_TEXT_SOFT), 0);
     lv_obj_set_style_text_font(visualizer_track_label, &p4_font_16, 0);
+    label_one_line(visualizer_track_label);
     lv_obj_align(visualizer_track_label, LV_ALIGN_TOP_LEFT, 36, 62);
 
     lv_obj_t *hint = lv_label_create(visualizer_overlay);

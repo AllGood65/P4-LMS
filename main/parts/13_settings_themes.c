@@ -187,6 +187,7 @@ static void settings_build_cards(void)
             strlen(t->name) > 9 ? &p4_font_18 : &p4_font_28, 0);
         lv_obj_set_width(name, 425 - 190 - 12);
         lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
+        label_one_line(name);
         lv_obj_align(name, LV_ALIGN_LEFT_MID, 190, 0);
     }
     lvgl_mem_log("theme cards");

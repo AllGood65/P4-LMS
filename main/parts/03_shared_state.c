@@ -37,6 +37,14 @@ typedef struct {
  * This prevents HTTP requests from blocking the LVGL event
  * task when a touchscreen button is pressed.
  */
+/* A "..." label must also get a one-line height: with only a width set,
+ * LVGL still wraps it onto more lines, which then overlap the text below.
+ * Call after the label's font is set. */
+static void label_one_line(lv_obj_t *l)
+{
+    lv_obj_set_height(l, lv_font_get_line_height(lv_obj_get_style_text_font(l, LV_PART_MAIN)));
+}
+
 static QueueHandle_t lyrion_command_queue = NULL;
 
 

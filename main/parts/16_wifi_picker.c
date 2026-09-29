@@ -102,6 +102,7 @@ static void wifi_rebuild_list_locked(void)
         lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
         lv_obj_set_style_text_color(name, lv_color_hex(UI_TEXT), 0);
         lv_obj_set_style_text_font(name, &p4_font_18, 0);
+        label_one_line(name);
         lv_obj_align(name, LV_ALIGN_LEFT_MID, 16, 0);
 
         char info[64];
@@ -351,6 +352,7 @@ static void wp_create(void)
     lv_label_set_long_mode(wp_title, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_color(wp_title, lv_color_hex(UI_TEXT), 0);
     lv_obj_set_style_text_font(wp_title, &p4_font_18, 0);
+    label_one_line(wp_title);
     lv_obj_set_pos(wp_title, 24, 12);
 
     wp_textarea = lv_textarea_create(panel);
@@ -480,6 +482,7 @@ static void wifi_create(void)
     lv_label_set_long_mode(wifi_cur_label, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_color(wifi_cur_label, lv_color_hex(UI_ACCENT_GLOW), 0);
     lv_obj_set_style_text_font(wifi_cur_label, &p4_font_16, 0);
+    label_one_line(wifi_cur_label);
     lv_obj_set_pos(wifi_cur_label, 30, 80);
 
     wifi_msg_label = lv_label_create(wifi_overlay);

@@ -368,6 +368,7 @@ static void nav_room_chip_create(lv_obj_t *header)
     lv_label_set_long_mode(room_chip_label, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_color(room_chip_label, lv_color_hex(UI_TEXT), 0);
     lv_obj_set_style_text_font(room_chip_label, &p4_font_18, 0);
+    label_one_line(room_chip_label);
     lv_obj_align(room_chip_label, LV_ALIGN_LEFT_MID, 36, 0);
     nav_room_chip_refresh();
 }
@@ -628,6 +629,7 @@ static lv_obj_t *room_label(lv_obj_t *parent, const lv_font_t *font, uint32_t co
     if (w > 0) {
         lv_obj_set_width(l, w);
         lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
+        label_one_line(l);
     }
     lv_obj_set_pos(l, x, y);
     return l;
@@ -780,6 +782,7 @@ static void group_dialog_open(void)
              lyrion_players[sel].short_name);
     lv_obj_t *st = modal_text(group_panel, sub, &p4_font_16, UI_TEXT_SOFT, 28, 62);
     lv_obj_set_width(st, 504);
+    label_one_line(st);
     lv_label_set_long_mode(st, LV_LABEL_LONG_DOT);
 
     int row = 0;
@@ -861,6 +864,7 @@ static void sleep_picker_create(lv_obj_t *screen)
     sleep_panel = sleep_overlay;
     lv_obj_t *st = lv_obj_get_child(sleep_panel, 0);
     lv_obj_set_width(st, 520);                            /* stops before BACK / CLOSE */
+    label_one_line(st);
     lv_label_set_long_mode(st, LV_LABEL_LONG_DOT);
 
     modal_text(sleep_panel, "Music stops and the player turns off after:", &p4_font_18,
@@ -1022,6 +1026,7 @@ static void rooms_create(lv_obj_t *screen)
 
         c->artist = room_label(c->card, &p4_font_16, UI_TEXT_SOFT, 16, 126, w - 32);
         c->title  = room_label(c->card, &p4_font_18, UI_TEXT, 16, 150, w - 32);
+        lv_obj_set_height(c->title, 2 * lv_font_get_line_height(&p4_font_18));   /* title may use two lines */
 
         c->play_btn = create_button(c->card, LV_SYMBOL_PLAY, 84, 56);
         lv_obj_set_pos(c->play_btn, 16, 196);
@@ -1223,6 +1228,7 @@ static void hub_create(lv_obj_t *screen)
         lv_label_set_long_mode(hub_subtitles[i], LV_LABEL_LONG_DOT);
         lv_obj_set_style_text_color(hub_subtitles[i], lv_color_hex(UI_TEXT_SOFT), 0);
         lv_obj_set_style_text_font(hub_subtitles[i], &p4_font_14, 0);
+        label_one_line(hub_subtitles[i]);
         lv_obj_set_pos(hub_subtitles[i], 96, 52);
 
         lv_obj_t *arrow = lv_label_create(tile);

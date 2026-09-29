@@ -720,6 +720,7 @@ static lv_obj_t *ss_label(lv_obj_t *parent, const lv_font_t *font, uint32_t colo
     lv_obj_set_style_text_color(l, lv_color_hex(color), 0);
     lv_obj_set_width(l, w);
     lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
+    label_one_line(l);
     lv_obj_set_pos(l, x, y);
     return l;
 }

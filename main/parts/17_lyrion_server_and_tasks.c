@@ -196,6 +196,7 @@ static void lms_rebuild_list_locked(void)
         lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
         lv_obj_set_style_text_color(name, lv_color_hex(UI_TEXT), 0);
         lv_obj_set_style_text_font(name, &p4_font_18, 0);
+        label_one_line(name);
         lv_obj_align(name, LV_ALIGN_LEFT_MID, 16, 0);
 
         char info[96];
@@ -273,6 +274,7 @@ static void lms_create(void)
     lv_label_set_long_mode(lms_cur_label, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_color(lms_cur_label, lv_color_hex(UI_ACCENT_GLOW), 0);
     lv_obj_set_style_text_font(lms_cur_label, &p4_font_16, 0);
+    label_one_line(lms_cur_label);
     lv_obj_set_pos(lms_cur_label, 30, 80);
 
     lms_msg_label = lv_label_create(lms_overlay);
@@ -626,6 +628,7 @@ static void create_source_browser(lv_obj_t *screen)
     /* Long album names end in "..." instead of running under BACK/CLOSE. */
     lv_obj_set_width(source_title_label, 620);
     lv_label_set_long_mode(source_title_label, LV_LABEL_LONG_DOT);
+    label_one_line(source_title_label);
     lv_obj_align(source_title_label, LV_ALIGN_TOP_LEFT, 30, 20);
 
     /* Hairline under the title row. */

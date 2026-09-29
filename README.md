@@ -64,6 +64,14 @@ To make a single combined file for the Releases page: `idf.py merge-bin` (create
 
 Board-specific defaults (starting server address, time zone, and more) are at the top of `main/parts/02_config.c`. The code is split into numbered files in `main/parts/`, which `main/main.c` includes in order.
 
+## Known limitations
+
+- Built and tested on one board, the Waveshare ESP32-P4-WIFI6-Touch-LCD-7B. Other ESP32-P4 boards need changes.
+- Tested with ESP-IDF 5.5 and a recent Lyrion Music Server, with up to four players shown.
+- The web settings page has no password. Use it on a home network you trust.
+- The web page and the connection to Home Assistant use plain HTTP on your local network.
+- Tested in one home with one set of players and switches. If something doesn't work with yours, please open an Issue with the serial log (`idf.py monitor`).
+
 ## About this project
 
 I'm a hardware hobbyist, not a programmer. The software was written with the help of AI (Anthropic's Claude): I described what I wanted, tested every version on the real hardware, and reported back what worked until it all came together.

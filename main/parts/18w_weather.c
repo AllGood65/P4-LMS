@@ -140,10 +140,58 @@ static void weather_url_escape(const char *in, char *out, size_t out_size)
     out[o] = '\0';
 }
 
+/* One lookup: search for name, prefer a result whose province / state /
+ * country matches hint.  Returns 1 found, 0 not found, -1 service unreachable. */
+static int weather_try(const char *name, const char *hint, char *buf, size_t buf_size)
+{
+    char esc[128], path[200];
+    weather_url_escape(name, esc, sizeof(esc));
+    snprintf(path, sizeof(path), "/v1/search?name=%s&count=10&language=en&format=json", esc);
+    if (!weather_get(path, "geocoding-api.open-meteo.com", buf, buf_size)) return -1;
+    int found = 0;
+    cJSON *root = cJSON_Parse(buf);
+    cJSON *res = root ? cJSON_GetObjectItem(root, "results") : NULL;
+    cJSON *pick = NULL, *r = NULL;
+    cJSON_ArrayForEach(r, res) {
+        if (pick == NULL) pick = r;                           /* first = most likely */
+        if (hint[0]) {
+            const char *keys[3] = { "admin1", "country", "country_code" };
+            for (int k = 0; k < 3; k++) {
+                cJSON *v = cJSON_GetObjectItem(r, keys[k]);
+                if (cJSON_IsString(v) && v->valuestring &&
+                    (strcasecmp(v->valuestring, hint) == 0 ||
+                     strncasecmp(v->valuestring, hint, strlen(hint)) == 0)) {
+                    pick = r;
+                    goto chosen;
+                }
+            }
+        }
+    }
+chosen:
+    if (pick != NULL) {
+        cJSON *la = cJSON_GetObjectItem(pick, "latitude");
+        cJSON *lo = cJSON_GetObjectItem(pick, "longitude");
+        cJSON *nm = cJSON_GetObjectItem(pick, "name");
+        cJSON *a1 = cJSON_GetObjectItem(pick, "admin1");
+        cJSON *co = cJSON_GetObjectItem(pick, "country");
+        if (cJSON_IsNumber(la) && cJSON_IsNumber(lo)) {
+            snprintf(wx_lat, sizeof(wx_lat), "%.4f", la->valuedouble);
+            snprintf(wx_lon, sizeof(wx_lon), "%.4f", lo->valuedouble);
+            snprintf(wx_place, sizeof(wx_place), "%.40s%s%.30s%s%.20s",
+                     cJSON_IsString(nm) ? nm->valuestring : name,
+                     cJSON_IsString(a1) ? ", " : "", cJSON_IsString(a1) ? a1->valuestring : "",
+                     cJSON_IsString(co) ? ", " : "", cJSON_IsString(co) ? co->valuestring : "");
+            found = 1;
+        }
+    }
+    if (root) cJSON_Delete(root);
+    return found;
+}
+
 static void weather_geocode(void)
 {
     wx_geocode_pending = false;
-    /* "Truro, NS" -> search "Truro"; the rest helps pick among the results. */
+    /* "Truro, NS" -> search "Truro", and "NS" helps pick among the results. */
     char name[64], hint[64] = "";
     snprintf(name, sizeof(name), "%s", wx_location);
     char *comma = strchr(name, ',');
@@ -153,56 +201,37 @@ static void weather_geocode(void)
         while (*h == ' ') h++;
         snprintf(hint, sizeof(hint), "%s", h);
     }
-    char esc[128], path[200];
-    weather_url_escape(name, esc, sizeof(esc));
-    snprintf(path, sizeof(path), "/v1/search?name=%s&count=10&language=en&format=json", esc);
     char *buf = heap_caps_malloc(16384, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (buf == NULL) return;
-    bool found = false;
-    if (weather_get(path, "geocoding-api.open-meteo.com", buf, 16384)) {
-        cJSON *root = cJSON_Parse(buf);
-        cJSON *res = root ? cJSON_GetObjectItem(root, "results") : NULL;
-        cJSON *pick = NULL, *r = NULL;
-        cJSON_ArrayForEach(r, res) {
-            if (pick == NULL) pick = r;                       /* first = most likely */
-            if (hint[0]) {
-                const char *keys[3] = { "admin1", "country", "country_code" };
-                for (int k = 0; k < 3; k++) {
-                    cJSON *v = cJSON_GetObjectItem(r, keys[k]);
-                    if (cJSON_IsString(v) && v->valuestring &&
-                        (strcasecmp(v->valuestring, hint) == 0 ||
-                         strncasecmp(v->valuestring, hint, strlen(hint)) == 0)) {
-                        pick = r;
-                        goto chosen;
-                    }
-                }
-            }
+    int got = weather_try(name, hint, buf, 16384);
+
+    /* No comma, e.g. "Halifax Nova Scotia" or "St Johns NL": try the first
+     * words as the town and the rest as the hint, longest town name first. */
+    if (got == 0 && comma == NULL && strchr(name, ' ') != NULL) {
+        char words[64];
+        snprintf(words, sizeof(words), "%s", name);
+        for (char *sp = strrchr(words, ' '); sp != NULL && got == 0; ) {
+            *sp = '\0';
+            const char *rest = name + (sp - words) + 1;
+            while (*rest == ' ') rest++;
+            char town[64];
+            snprintf(town, sizeof(town), "%s", words);
+            size_t tl = strlen(town);
+            while (tl > 0 && town[tl - 1] == ' ') town[--tl] = '\0';
+            if (tl > 0) got = weather_try(town, rest, buf, 16384);
+            sp = strrchr(words, ' ');
         }
-chosen:
-        if (pick != NULL) {
-            cJSON *la = cJSON_GetObjectItem(pick, "latitude");
-            cJSON *lo = cJSON_GetObjectItem(pick, "longitude");
-            cJSON *nm = cJSON_GetObjectItem(pick, "name");
-            cJSON *a1 = cJSON_GetObjectItem(pick, "admin1");
-            cJSON *co = cJSON_GetObjectItem(pick, "country");
-            if (cJSON_IsNumber(la) && cJSON_IsNumber(lo)) {
-                snprintf(wx_lat, sizeof(wx_lat), "%.4f", la->valuedouble);
-                snprintf(wx_lon, sizeof(wx_lon), "%.4f", lo->valuedouble);
-                snprintf(wx_place, sizeof(wx_place), "%.40s%s%.30s%s%.20s",
-                         cJSON_IsString(nm) ? nm->valuestring : wx_location,
-                         cJSON_IsString(a1) ? ", " : "", cJSON_IsString(a1) ? a1->valuestring : "",
-                         cJSON_IsString(co) ? ", " : "", cJSON_IsString(co) ? co->valuestring : "");
-                found = true;
-            }
-        }
-        if (root) cJSON_Delete(root);
-        snprintf(wx_status, sizeof(wx_status), found ? "Weather for %.80s" : "Couldn't find \"%.60s\" - try another spelling",
-                 found ? wx_place : wx_location);
-    } else {
-        snprintf(wx_status, sizeof(wx_status), "Couldn't reach the weather service");
-        wx_geocode_pending = true;                             /* try again later */
     }
     heap_caps_free(buf);
+
+    const bool found = (got == 1);
+    if (got < 0) {
+        snprintf(wx_status, sizeof(wx_status), "Couldn't reach the weather service");
+        wx_geocode_pending = true;                             /* try again later */
+    } else {
+        snprintf(wx_status, sizeof(wx_status), found ? "Weather for %.80s" : "Couldn't find \"%.60s\" - try another spelling",
+                 found ? wx_place : wx_location);
+    }
     ESP_LOGI(TAG, "Weather location: %s", wx_status);
     if (found) {
         weather_save();

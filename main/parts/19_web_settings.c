@@ -164,6 +164,17 @@ static void ha_map_set(const char *id, const char *amp, const char *pre, int del
     ha_map[k].amp_first = amp_first ? 1 : 0;
 }
 
+/* Form field name for a room's position: "rp" + its MAC without colons, so a
+ * position always belongs to the same room even if the list order changed. */
+static void web_room_field(char *out, size_t n, const char *mac)
+{
+    size_t o = (size_t)snprintf(out, n, "rp");
+    for (const char *c = mac; *c && o + 1 < n; c++) {
+        if (isxdigit((unsigned char)*c)) out[o++] = (char)tolower((unsigned char)*c);
+    }
+    out[o] = '\0';
+}
+
 /* ------------------------------------------------------------ page helpers */
 typedef struct { char *buf; size_t len, cap; } web_out_t;
 
@@ -466,7 +477,9 @@ static esp_err_t web_send_page(httpd_req_t *req, const char *notice, bool notice
             for (int i = 0; i < lyrion_player_count; i++) {
                 web_add(&o, "<div><label>");
                 web_add_escaped(&o, lyrion_players[i].name);
-                web_add(&o, "</label><select name='rpos%d'>", i);
+                char fname[24];
+                web_room_field(fname, sizeof(fname), lyrion_players[i].id);
+                web_add(&o, "</label><select name='%s'>", fname);
                 for (int k = 1; k <= lyrion_player_count; k++) {
                     web_add(&o, "<option value='%d'%s>%d%s</option>", k, k == i + 1 ? " selected" : "", k,
                             k == 1 ? "st" : k == 2 ? "nd" : k == 3 ? "rd" : "th");
@@ -639,8 +652,12 @@ static esp_err_t web_send_page(httpd_req_t *req, const char *notice, bool notice
 static esp_err_t web_get_root(httpd_req_t *req)
 {
     char q[16] = "";
-    const bool saved = httpd_req_get_url_query_str(req, q, sizeof(q)) == ESP_OK && strcmp(q, "saved=1") == 0;
-    return web_send_page(req, saved ? "Saved - already in use." : NULL, true);
+    const bool got = httpd_req_get_url_query_str(req, q, sizeof(q)) == ESP_OK;
+    const char *notice = NULL;
+    if (got && strcmp(q, "saved=1") == 0) notice = "Saved - already in use.";
+    if (got && strcmp(q, "saved=2") == 0) notice = "Saved. The display is restarting with the new room order - "
+                                                   "reload this page in about 15 seconds.";
+    return web_send_page(req, notice, true);
 }
 
 /* In place: '+' -> space, %XX -> byte. */
@@ -796,8 +813,8 @@ static esp_err_t web_post_save(httpd_req_t *req)
     if (np > 1 && lms_active >= 0 && lms_active < lms_profile_count) {
         int key[LMS_MAX_PLAYERS];
         for (int i = 0; i < np; i++) {
-            char k[12];
-            snprintf(k, sizeof(k), "rpos%d", i);
+            char k[24];
+            web_room_field(k, sizeof(k), lyrion_players[i].id);
             web_field(body, k, v, sizeof(v));
             const int pos = web_clamp_int(v, 1, np, i + 1);
             key[i] = pos * 64 + (pos == i + 1 ? 32 : 0) + i;
@@ -832,15 +849,13 @@ static esp_err_t web_post_save(httpd_req_t *req)
     }
     ESP_LOGI(TAG, "Settings saved from the web page");
     if (reorder) {
-        web_send_page(req, "Saved. The display is restarting with the new room order - "
-                           "reload this page in about 15 seconds.", true);
         lms_request_restart("room order changed on the web page");
-        return ESP_OK;
+    } else {
+        ui_toast_post("Settings saved from the web page");
     }
-    ui_toast_post("Settings saved from the web page");
     /* Back to the page, so a browser refresh doesn't post the form again. */
     httpd_resp_set_status(req, "303 See Other");
-    httpd_resp_set_hdr(req, "Location", "/?saved=1");
+    httpd_resp_set_hdr(req, "Location", reorder ? "/?saved=2" : "/?saved=1");
     return httpd_resp_send(req, NULL, 0);
 }
 

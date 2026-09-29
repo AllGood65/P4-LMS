@@ -458,7 +458,24 @@ static esp_err_t web_send_page(httpd_req_t *req, const char *notice, bool notice
             if (i) web_add(&o, ", ");
             web_add_escaped(&o, lyrion_players[i].name);
         }
-        web_add(&o, "</div></section>");
+        web_add(&o, "</div>");
+        /* Room order: a position for each room (saved for this location). */
+        if (lyrion_player_count > 1 && lms_active >= 0) {
+            web_add(&o, "<h3>Room order</h3><div class='small'>The order rooms appear on the display. "
+                        "Saving a new order restarts the display.</div><div class='row'>");
+            for (int i = 0; i < lyrion_player_count; i++) {
+                web_add(&o, "<div><label>");
+                web_add_escaped(&o, lyrion_players[i].name);
+                web_add(&o, "</label><select name='rpos%d'>", i);
+                for (int k = 1; k <= lyrion_player_count; k++) {
+                    web_add(&o, "<option value='%d'%s>%d%s</option>", k, k == i + 1 ? " selected" : "", k,
+                            k == 1 ? "st" : k == 2 ? "nd" : k == 3 ? "rd" : "th");
+                }
+                web_add(&o, "</select></div>");
+            }
+            web_add(&o, "</div>");
+        }
+        web_add(&o, "</section>");
     }
 
     /* display */
@@ -770,12 +787,56 @@ static esp_err_t web_post_save(httpd_req_t *req)
         web_field(body, "wx_units", v, sizeof(v));
         weather_set(loc, web_clamp_int(v, 0, 1, wx_units));
     }
+    /* Room order: sort by the chosen positions.  A room given a new position
+     * goes ahead of one that kept that position, so "move Basement to 1st"
+     * works without renumbering the others. */
+    int order[LMS_MAX_PLAYERS];
+    bool reorder = false;
+    const int np = lyrion_player_count;
+    if (np > 1 && lms_active >= 0 && lms_active < lms_profile_count) {
+        int key[LMS_MAX_PLAYERS];
+        for (int i = 0; i < np; i++) {
+            char k[12];
+            snprintf(k, sizeof(k), "rpos%d", i);
+            web_field(body, k, v, sizeof(v));
+            const int pos = web_clamp_int(v, 1, np, i + 1);
+            key[i] = pos * 64 + (pos == i + 1 ? 32 : 0) + i;
+            order[i] = i;
+        }
+        for (int a = 1; a < np; a++) {                 /* insertion sort by key */
+            const int t = order[a];
+            int b = a - 1;
+            while (b >= 0 && key[order[b]] > key[t]) { order[b + 1] = order[b]; b--; }
+            order[b + 1] = t;
+        }
+        for (int i = 0; i < np; i++) if (order[i] != i) reorder = true;
+    }
     heap_caps_free(body);
+
+    if (reorder) {
+        lms_profile_t *pr = &lms_profiles[lms_active];
+        lyrion_player_t sorted[LMS_MAX_PLAYERS];
+        int new_sel = 0;
+        for (int i = 0; i < np; i++) {
+            sorted[i] = lyrion_players[order[i]];
+            if (order[i] == current_player_index) new_sel = i;
+        }
+        memcpy(pr->players, sorted, sizeof(lyrion_player_t) * np);
+        lms_profiles_save();
+        save_selected_player(new_sel);          /* stay on the same room */
+        ESP_LOGI(TAG, "Room order changed - restarting to apply it");
+    }
 
     if (!web_settings_save()) {
         return web_send_page(req, "Could not save to the board's storage - try again.", false);
     }
     ESP_LOGI(TAG, "Settings saved from the web page");
+    if (reorder) {
+        web_send_page(req, "Saved. The display is restarting with the new room order - "
+                           "reload this page in about 15 seconds.", true);
+        lms_request_restart("room order changed on the web page");
+        return ESP_OK;
+    }
     ui_toast_post("Settings saved from the web page");
     /* Back to the page, so a browser refresh doesn't post the form again. */
     httpd_resp_set_status(req, "303 See Other");

@@ -1,0 +1,73 @@
+# P4-LMS
+
+A 7" touchscreen controller for whole-house music, built on a Waveshare ESP32-P4 display board. It controls a [Lyrion Music Server](https://lyrion.org/) (formerly Logitech Media Server) and can switch amplifiers on and off through [Home Assistant](https://www.home-assistant.io/).
+
+![P4-LMS Now Playing screen](docs/now-playing.jpg)
+
+## Features
+
+- **Now Playing:** cover art, track info, play/pause/skip, volume, and a live VU meter from the board's microphone
+- **Rooms:** every player on one screen, with what's playing, its volume, one-tap room switching and grouping rooms to play in sync
+- **System power:** one switch per room turns the amp (and an optional pre-amp) on and off through Home Assistant, in a configurable order with a delay, so there's no speaker thump
+- **Music browsing:** artists, albums with cover art, genres, folders, search, favourites, and picking several songs at once
+- **Queue editing:** move songs, play next, remove, favourite, add to a playlist
+- **Saved playlists:** create, add to, reorder, rename, and play from any song
+- **Internet radio and apps,** including YouTube search (with Lyrion's YouTube plugin)
+- **Visualizers:** several styles driven by the built-in microphone, with adjustable sensitivity
+- **Colour themes**
+- **Screensavers:** album art, cover wall, big text, VU meters, clocks, and weather with a 3-day forecast (Open-Meteo, no account needed)
+- **Sleep timer and alarms** that power the amps down and up in order
+- **Web settings page:** Home Assistant setup, power switches, weather location, time zone, settings backup/restore, and firmware updates over Wi-Fi
+- **Location profiles:** remembers a separate Lyrion server and players for each Wi-Fi network
+
+## Hardware
+
+- [Waveshare ESP32-P4-WIFI6-Touch-LCD-7B](https://www.waveshare.com/esp32-p4-wifi6-touch-lcd-7b.htm) (7", 1024×600, ESP32-P4 with an ESP32-C6 for Wi-Fi)
+- A Lyrion Music Server on your network, with at least one player (for example [Squeezelite-ESP32](https://github.com/sle118/squeezelite-esp32) streamers)
+- Optional: Home Assistant with switch entities for your amps and pre-amps
+
+## Install the ready-made firmware
+
+1. Download `P4-LMS-vX.Y.bin` from the [Releases](../../releases) page.
+2. Connect the board to your computer with a USB-C cable.
+3. Flash it with either:
+   - **In a browser:** open the [ESP web flasher](https://espressif.github.io/esptool-js/) in Chrome or Edge, click **Connect**, choose the board's port, set the address to **0x0**, pick the `.bin` file, and click **Program**.
+   - **From a terminal:** `esptool.py --chip esp32p4 -b 460800 write_flash 0x0 P4-LMS-vX.Y.bin`
+4. The display restarts when it's done.
+
+## First-time setup
+
+1. **Wi-Fi:** on the display, go to **Settings › Wi-Fi**, tap **SCAN**, and choose your network.
+2. **Lyrion server:** go to **Settings › Lyrion server** and tap **FIND SERVERS**. Choose yours; the display restarts with that server's players.
+3. **Web settings:** **Settings › About** shows the display's web address (`http://<display IP>/`). Open it in a browser to set:
+   - your **time zone** and **weather location**
+   - **Home Assistant:** its address and a long-lived access token (in Home Assistant: your profile › Security › Long-lived access tokens)
+   - **power switches** for each player, with the pre-amp order and delay
+4. **Back up** your settings from the bottom of the web page once everything is set.
+
+## Updating
+
+Later versions can be installed from the web settings page: **Firmware update** › choose the new `P4-LMS.bin` (the app file from a build, not the combined release file) › **Install**. If a new version fails to start properly, the display goes back to the previous one by itself.
+
+## Building from source
+
+Requires [ESP-IDF](https://docs.espressif.com/projects/esp-idf/) v5.5.
+
+```
+idf.py set-target esp32p4
+idf.py menuconfig        # optional: "P4-LMS WiFi Configuration" for a built-in network
+idf.py build
+idf.py -p <PORT> flash monitor
+```
+
+To make a single combined file for the Releases page: `idf.py merge-bin` (creates `build/merged-binary.bin`).
+
+Board-specific defaults (starting server address, time zone, and more) are at the top of `main/parts/02_config.c`. The code is split into numbered files in `main/parts/`, which `main/main.c` includes in order.
+
+## About this project
+
+I'm a hardware hobbyist, not a programmer. The software was written with the help of AI (Anthropic's Claude): I described what I wanted, tested every version on the real hardware, and reported back what worked until it all came together.
+
+## License
+
+MIT - see [LICENSE](LICENSE). Third-party components and their licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

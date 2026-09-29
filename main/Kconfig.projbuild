@@ -1,0 +1,16 @@
+menu "P4-LMS WiFi Configuration"
+
+config P4_LMS_WIFI_SSID
+    string "WiFi SSID (optional)"
+    default ""
+    help
+        A built-in Wi-Fi network for P4-LMS. Leave empty and choose your
+        network on the display instead (Settings > Wi-Fi > SCAN).
+
+config P4_LMS_WIFI_PASSWORD
+    string "WiFi Password (optional)"
+    default ""
+    help
+        Password for the built-in Wi-Fi network above.
+
+endmenu

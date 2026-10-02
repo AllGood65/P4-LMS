@@ -1034,6 +1034,22 @@ static void source_item_event_cb(lv_event_t *e)
         return;
     }
 
+    /* Sorting the queue or a playlist: while one song's move controls are
+     * open, tapping another song moves the controls to it (instead of
+     * playing it), and tapping the open song closes them again. */
+    if ((source_current_mode == SOURCE_QUEUE || source_current_mode == SOURCE_PLAYLIST_TRACKS) &&
+        source_queue_sel >= 0) {
+        bool open_here = false;
+        for (int k = 0; k < source_item_count && k < SOURCE_QUEUE_PAGE; k++) {
+            if (source_items[k].id == source_queue_sel) { open_here = true; break; }
+        }
+        if (open_here) {
+            source_queue_sel = (item.id == source_queue_sel) ? -1 : item.id;
+            queue_rows_apply_selection();
+            return;
+        }
+    }
+
     /* Library home "Search" tile: ask what to look for (keyboard). */
     if (item.action == SOURCE_SEARCH_PROMPT) {
         wp_open(3, "", -1);

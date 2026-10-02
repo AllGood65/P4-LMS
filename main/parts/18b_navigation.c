@@ -1329,20 +1329,29 @@ static void nav_style_tab(int i, bool on)
  * np_fav: -1 unknown / nothing playing (hidden), 0 not a favorite, 1 favorite.
  * The status task tracks the playing URL; the browser task asks Lyrion. */
 static int fav_shown = -2;
+static int list_shown = -1;
 
 static void fav_refresh_locked(void)
 {
     if (fav_button == NULL) return;
     const int f = np_fav;
+
+    /* "+ LIST" only for songs: a live radio stream has no length, and
+     * adding a never-ending stream to a playlist makes no sense. */
+    const int want_list = (f >= 0 && playback_valid && playback_duration_s > 0.0) ? 1 : 0;
+    if (np_list_button != NULL && want_list != list_shown) {
+        list_shown = want_list;
+        if (want_list) lv_obj_remove_flag(np_list_button, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(np_list_button, LV_OBJ_FLAG_HIDDEN);
+    }
+
     if (f == fav_shown) return;
     fav_shown = f;
     if (f < 0) {
         lv_obj_add_flag(fav_button, LV_OBJ_FLAG_HIDDEN);
-        if (np_list_button != NULL) lv_obj_add_flag(np_list_button, LV_OBJ_FLAG_HIDDEN);
         return;
     }
     lv_obj_remove_flag(fav_button, LV_OBJ_FLAG_HIDDEN);
-    if (np_list_button != NULL) lv_obj_remove_flag(np_list_button, LV_OBJ_FLAG_HIDDEN);
     lv_obj_t *label = lv_obj_get_child(fav_button, 0);
     if (label != NULL) {
         lv_label_set_text(label, f ? LV_SYMBOL_OK " FAV" : LV_SYMBOL_PLUS " FAV");

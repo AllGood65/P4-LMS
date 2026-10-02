@@ -211,6 +211,7 @@ static source_mode_t source_current_mode = SOURCE_ROOT;
 static int  source_queue_total   = 0;     /* songs in the queue                    */
 static int  source_queue_current = -1;    /* index of the playing song             */
 static int  source_queue_sel     = -1;    /* index whose move controls are open    */
+static bool source_queue_radio = false;   /* the queue is just one live radio station */
 static bool source_queue_keep_sel = false;/* a move: keep that song selected       */
 static volatile bool source_queue_busy = false;  /* a move is on its way           */
 static lv_obj_t *queue_row_more[SOURCE_QUEUE_PAGE];
@@ -596,6 +597,7 @@ static void source_update_page_controls(void)
 
         {
             const bool queue_buttons = (source_current_mode == SOURCE_QUEUE && source_item_count > 0);
+            const bool can_save = queue_buttons && !source_queue_radio;   /* no playlist of one station */
             const bool pl_view = (source_current_mode == SOURCE_PLAYLIST_TRACKS && source_parent_id > 0);
             if (source_queue_play_button != NULL) {
                 if (queue_buttons) lv_obj_clear_flag(source_queue_play_button, LV_OBJ_FLAG_HIDDEN);
@@ -604,7 +606,7 @@ static void source_update_page_controls(void)
             /* SAVE in the queue, RENAME in a playlist. */
             if (source_save_button != NULL) {
                 lv_label_set_text(lv_obj_get_child(source_save_button, 0), pl_view ? "RENAME" : "SAVE");
-                if (queue_buttons || pl_view) lv_obj_clear_flag(source_save_button, LV_OBJ_FLAG_HIDDEN);
+                if (can_save || pl_view) lv_obj_clear_flag(source_save_button, LV_OBJ_FLAG_HIDDEN);
                 else                          lv_obj_add_flag(source_save_button, LV_OBJ_FLAG_HIDDEN);
             }
         }

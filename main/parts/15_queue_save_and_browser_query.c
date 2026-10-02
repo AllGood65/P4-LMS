@@ -438,6 +438,47 @@ static void source_grid_fetch_covers(void)
  * "..." on a row opens its move controls (14_power_and_browser_rows.c). */
 static void source_render_queue(void)
 {
+    /* Live radio: one station card instead of a list with sort buttons. */
+    if (source_queue_radio && source_item_count == 1) {
+        lv_obj_t *card = lv_obj_create(source_overlay);
+        lv_obj_remove_style_all(card);
+        lv_obj_set_size(card, 870, 150);
+        lv_obj_set_pos(card, SOURCE_GRID_X0, 96);
+        lv_obj_set_style_bg_color(card, lv_color_hex(UI_ACCENT_DARK), 0);
+        lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(card, 12, 0);
+        lv_obj_set_style_border_width(card, 2, 0);
+        lv_obj_set_style_border_color(card, lv_color_hex(UI_ACCENT), 0);
+        lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(card, LV_OBJ_FLAG_CLICKABLE);
+        source_item_buttons[0] = card;          /* so the next view clears it */
+
+        lv_obj_t *tag = lv_label_create(card);
+        lv_label_set_text(tag, LV_SYMBOL_AUDIO "  LIVE RADIO");
+        lv_obj_set_style_text_font(tag, &p4_font_16, 0);
+        lv_obj_set_style_text_color(tag, lv_color_hex(UI_ACCENT), 0);
+        lv_obj_set_pos(tag, 24, 20);
+
+        lv_obj_t *name = lv_label_create(card);
+        lv_label_set_text(name, source_items[0].title);
+        lv_obj_set_style_text_font(name, &p4_font_28, 0);
+        lv_obj_set_style_text_color(name, lv_color_hex(UI_TEXT), 0);
+        lv_obj_set_width(name, 870 - 48);
+        lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
+        label_one_line(name);
+        lv_obj_set_pos(name, 24, 52);
+
+        lv_obj_t *note = lv_label_create(card);
+        lv_label_set_text(note, "A station plays on its own. Playing songs or an album replaces it.");
+        lv_obj_set_style_text_font(note, &p4_font_14, 0);
+        lv_obj_set_style_text_color(note, lv_color_hex(UI_TEXT_SOFT), 0);
+        lv_obj_set_width(note, 870 - 48);
+        lv_label_set_long_mode(note, LV_LABEL_LONG_DOT);
+        label_one_line(note);
+        lv_obj_set_pos(note, 24, 108);
+        return;
+    }
+
     for (int i = 0; i < source_item_count && i < SOURCE_QUEUE_PAGE; i++) {
         char clean[SOURCE_TEXT_MAX];
         source_strip_audio_extension(source_items[i].title, clean, sizeof(clean));
@@ -1549,7 +1590,7 @@ static void source_query_and_render(source_request_t request)
         /* The queue is the player's current playlist, read a page at a time
          * from "status" with the artist tag. */
         snprintf(json, sizeof(json),
-                 "{\"id\":1,\"method\":\"slim.request\",\"params\":[\"%s\",[\"status\",%d,%d,\"tags:au\"]]}",
+                 "{\"id\":1,\"method\":\"slim.request\",\"params\":[\"%s\",[\"status\",%d,%d,\"tags:audN\"]]}",
                  lyrion_players[player_index].id, request.offset, SOURCE_QUEUE_PAGE);
         if (!source_http_query(player_index, json, response, SOURCE_BROWSE_BUF)) {
             heap_caps_free(response);
@@ -1573,6 +1614,8 @@ static void source_query_and_render(source_request_t request)
         else if (cJSON_IsString(cur) && cur->valuestring) current = atoi(cur->valuestring);
 
         source_item_count = 0;
+        bool first_is_live = false;        /* a stream with no length: live radio */
+        char station[SOURCE_TEXT_MAX] = "";
         cJSON *loop = cJSON_GetObjectItem(qres, "playlist_loop");
         cJSON *entry = NULL;
         cJSON_ArrayForEach(entry, loop) {
@@ -1602,19 +1645,36 @@ static void source_query_and_render(source_request_t request)
                 snprintf(source_items[source_item_count - 1].radio_play_json,
                          sizeof(source_items[0].radio_play_json), "%s",
                          (cJSON_IsString(u) && u->valuestring) ? u->valuestring : "");
+                if (source_item_count == 1) {
+                    const char *url = source_items[0].radio_play_json;
+                    cJSON *du = cJSON_GetObjectItem(entry, "duration");
+                    const double len = cJSON_IsNumber(du) ? du->valuedouble
+                                     : (cJSON_IsString(du) && du->valuestring ? atof(du->valuestring) : 0.0);
+                    first_is_live = url[0] && strncmp(url, "file:", 5) != 0 &&
+                                    strncmp(url, "db:", 3) != 0 && len <= 0.0;
+                    cJSON *rt = cJSON_GetObjectItem(entry, "remote_title");   /* the station's name */
+                    snprintf(station, sizeof(station), "%s",
+                             (cJSON_IsString(rt) && rt->valuestring && rt->valuestring[0])
+                                 ? rt->valuestring : title);
+                }
             }
         }
         cJSON_Delete(qroot);
         source_has_next = (request.offset + SOURCE_QUEUE_PAGE < total);
         source_queue_total = total;
         source_queue_current = current;
+        source_queue_radio = (total == 1 && source_item_count == 1 && first_is_live);
+        if (source_queue_radio) {
+            snprintf(source_items[0].title, sizeof(source_items[0].title), "%s", station);
+        }
         if (!source_queue_keep_sel) source_queue_sel = -1;   /* only a move keeps it */
         source_queue_keep_sel = false;
 
         source_commit_view(&request, SOURCE_QUEUE);
         {
             char title[40];
-            snprintf(title, sizeof(title), total == 1 ? "QUEUE  (1 SONG)" : "QUEUE  (%d SONGS)", total);
+            if (source_queue_radio) snprintf(title, sizeof(title), "QUEUE  (LIVE RADIO)");
+            else snprintf(title, sizeof(title), total == 1 ? "QUEUE  (1 SONG)" : "QUEUE  (%d SONGS)", total);
             source_render_ctx_t ctx = { .title = title };
             ui_call(source_render_job, &ctx);
         }

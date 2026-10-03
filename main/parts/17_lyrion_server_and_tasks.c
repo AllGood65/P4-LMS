@@ -621,6 +621,26 @@ static void create_source_browser(lv_obj_t *screen)
     lv_obj_set_scrollbar_mode(source_track_list, LV_SCROLLBAR_MODE_AUTO);
     lv_obj_add_flag(source_track_list, LV_OBJ_FLAG_HIDDEN);
 
+    /* Scroll area for the two-column menus (Artists, Genres, Favorites,
+     * radio...) and the album-cover grid: swipe up and down instead of
+     * paging.  The PREV / NEXT bar stays fixed underneath. */
+    source_menu_list = lv_obj_create(source_overlay);
+    lv_obj_remove_style_all(source_menu_list);
+    lv_obj_set_size(source_menu_list, PANEL_W - 4, SOURCE_MENU_LIST_H);
+    lv_obj_set_pos(source_menu_list, 0, SOURCE_MENU_LIST_Y);
+    lv_obj_set_style_bg_opa(source_menu_list, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(source_menu_list, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(source_menu_list, 12, LV_PART_MAIN);
+    lv_obj_add_flag(source_menu_list, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(source_menu_list, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(source_menu_list, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_add_flag(source_menu_list, LV_OBJ_FLAG_HIDDEN);
+
+    /* Both lists draw only the rows in view, and add / remove rows as
+     * they scroll (source_vl_update). */
+    lv_obj_add_event_cb(source_menu_list, source_vl_scroll_cb, LV_EVENT_SCROLL, NULL);
+    lv_obj_add_event_cb(source_track_list, source_vl_scroll_cb, LV_EVENT_SCROLL, NULL);
+
     source_title_label = lv_label_create(source_overlay);
     lv_label_set_text(source_title_label, "MUSIC SOURCE");
     lv_obj_set_style_text_color(source_title_label, lv_color_hex(UI_TEXT), 0);

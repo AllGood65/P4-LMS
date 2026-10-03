@@ -229,6 +229,7 @@ static void ssp_create(lv_obj_t *screen)
 static lv_obj_t *vsp_style_btn[VIS_STYLE_COUNT + 1];
 static lv_obj_t *vsp_pal_btn[VIS_PAL_COUNT];
 static lv_obj_t *vsp_gain_btn[4];
+static lv_obj_t *vsp_vu_btn = NULL;
 
 static void vsp_refresh(void)
 {
@@ -241,6 +242,20 @@ static void vsp_refresh(void)
     for (int i = 0; i < 4; i++) {
         if (vsp_gain_btn[i] != NULL) ssp_style_choice(vsp_gain_btn[i], i == mic_gain_step);
     }
+    if (vsp_vu_btn != NULL) {
+        ssp_style_choice(vsp_vu_btn, vu_meter_shown);
+        lv_label_set_text(lv_obj_get_child(vsp_vu_btn, 0), vu_meter_shown ? "VU METER  ON" : "VU METER  OFF");
+    }
+}
+
+/* VU meter on Now Playing on / off. */
+static void vsp_vu_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    vu_meter_shown = !vu_meter_shown;
+    vu_apply_shown();
+    vu_shown_save();
+    vsp_refresh();
 }
 
 static void vsp_gain_event_cb(lv_event_t *e)
@@ -347,6 +362,10 @@ static void vsp_create(lv_obj_t *screen)
         lv_obj_add_event_cb(b, vsp_gain_event_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
         vsp_gain_btn[i] = b;
     }
+    /* beside them: the VU meter on Now Playing on or off */
+    vsp_vu_btn = create_button(p, "VU METER  ON", 168, 46);
+    lv_obj_set_pos(vsp_vu_btn, 30 + 4 * 174 + 6, py + 92);
+    lv_obj_add_event_cb(vsp_vu_btn, vsp_vu_event_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *open = create_button(p, LV_SYMBOL_EYE_OPEN "  PREVIEW", 150, 50);
     lv_obj_align(open, LV_ALIGN_TOP_RIGHT, -362, 14);

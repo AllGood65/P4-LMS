@@ -12,6 +12,9 @@
 static void lyrion_status_task(void *arg);
 
 static void lyrion_command_task(void *arg);
+static void np_power_room_changed(void);      /* Now Playing power button, 11_transport_controls.c */
+static void np_power_refresh_soon(void);
+static volatile bool wifi_have_ip = false;    /* set once the display has an address */
 static void source_browser_task(void *arg);
 static void lvgl_mem_log(const char *when);   /* defined later, near SETTINGS */
 static bool source_http_query(int player_index, const char *command_json,

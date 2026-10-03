@@ -940,7 +940,7 @@ void app_main(void)
         create_button(
             screen,
             LV_SYMBOL_PREV,
-            105,
+            95,
             72
         );
 
@@ -974,7 +974,7 @@ void app_main(void)
         create_button(
             screen,
             LV_SYMBOL_PLAY,
-            190,
+            170,
             72
         );
 
@@ -982,7 +982,7 @@ void app_main(void)
     lv_obj_align(
         play_button,
         LV_ALIGN_TOP_LEFT,
-        555,
+        540,
         316
     );
 
@@ -1016,7 +1016,7 @@ void app_main(void)
         create_button(
             screen,
             LV_SYMBOL_NEXT,
-            105,
+            95,
             72
         );
 
@@ -1024,7 +1024,7 @@ void app_main(void)
     lv_obj_align(
         next,
         LV_ALIGN_TOP_LEFT,
-        760,
+        720,
         316
     );
 
@@ -1043,16 +1043,24 @@ void app_main(void)
 
     /* Shuffle and repeat toggles, to the right of the transport buttons. */
     shuffle_button = create_button(screen, LV_SYMBOL_SHUFFLE, 52, 72);
-    lv_obj_align(shuffle_button, LV_ALIGN_TOP_LEFT, 880, 316);
+    lv_obj_align(shuffle_button, LV_ALIGN_TOP_LEFT, 823, 316);
     lv_obj_set_style_border_width(shuffle_button, 2, LV_PART_MAIN);
     lv_obj_set_style_text_font(lv_obj_get_child(shuffle_button, 0), &p4_font_18, 0);
     lv_obj_add_event_cb(shuffle_button, shuffle_button_event_cb, LV_EVENT_CLICKED, NULL);
 
     repeat_button = create_button(screen, LV_SYMBOL_LOOP, 52, 72);
-    lv_obj_align(repeat_button, LV_ALIGN_TOP_LEFT, 938, 316);
+    lv_obj_align(repeat_button, LV_ALIGN_TOP_LEFT, 881, 316);
     lv_obj_set_style_border_width(repeat_button, 2, LV_PART_MAIN);
     lv_obj_set_style_text_font(lv_obj_get_child(repeat_button, 0), &p4_font_18, 0);
     lv_obj_add_event_cb(repeat_button, repeat_button_event_cb, LV_EVENT_CLICKED, NULL);
+
+    /* System power for this room (amp + pre-amp, via Home Assistant). */
+    np_power_button = create_button(screen, LV_SYMBOL_POWER, 52, 72);
+    lv_obj_align(np_power_button, LV_ALIGN_TOP_LEFT, 939, 316);
+    lv_obj_set_style_border_width(np_power_button, 2, LV_PART_MAIN);
+    lv_obj_set_style_text_font(lv_obj_get_child(np_power_button, 0), &p4_font_18, 0);
+    lv_obj_add_event_cb(np_power_button, np_power_event_cb, LV_EVENT_CLICKED, NULL);
+    np_power_apply_locked();
 
     ui_apply_mode_buttons_locked();
 
@@ -1485,6 +1493,9 @@ void app_main(void)
         0
     );
     lv_obj_add_flag(stereo_label, LV_OBJ_FLAG_HIDDEN);    /* compact meter: no title row */
+
+    /* "VU meter off" (Settings > Visualizer): a plain cover over the meter. */
+    vu_off_cover_create(spectrum);
 
     /* The bars, markers and scale are objects too and would catch a tap
      * themselves; let every tap on the meter reach the meter. */

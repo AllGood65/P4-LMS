@@ -111,6 +111,7 @@ static void wifi_event_handler(
             (ip_event_got_ip_t *)event_data;
 
         wifi_retry_count = 0;
+        wifi_have_ip = true;
         ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
 
         if (!wifi_manual && wifi_try_ssid[0] && strcmp(wifi_try_ssid, wifi_cur_ssid) != 0) {

@@ -9,9 +9,16 @@
  * LYRION SOURCE / LIBRARY BROWSER
  * ============================================================ */
 
-#define SOURCE_MAX_ITEMS       10
-#define SOURCE_QUERY_ITEMS     11
+/* Lists scroll: up to this many items are fetched at once, and PREV / NEXT
+ * appear only for lists that are longer than that.  Only the rows on (or
+ * near) the screen are actually drawn - see source_vl_update() - so a long
+ * list costs no more display memory than a short one. */
+#define SOURCE_MAX_ITEMS       200
+#define SOURCE_QUERY_ITEMS     201
 #define SOURCE_MAX_TRACKS      200   /* fetch all album tracks in one request */
+/* A list grows as it is scrolled (200 more each time the end comes near),
+ * up to this many; only very long lists ever need PREV / NEXT. */
+#define SOURCE_ITEM_CAP        1000
 #define SOURCE_BUTTON_W        425
 #define SOURCE_GRID_X0          30    /* left edge of the two-column grid */
 #define SOURCE_GRID_DX         (SOURCE_BUTTON_W + 20)
@@ -30,7 +37,7 @@
 #define SOURCE_ROOT_SHOW_RADIO     1
 
 /* Big enough for a 200-track album or the radio plugin's menu. */
-#define SOURCE_BROWSE_BUF      65536
+#define SOURCE_BROWSE_BUF      (160 * 1024)   /* PSRAM; room for 200 albums with their details */
 #define SOURCE_APP_BUF         (384 * 1024)   /* app / radio menus (PSRAM) */
 #define SOURCE_BUTTON_H        70
 #define SOURCE_MENU_BUTTON_H    60
@@ -121,6 +128,7 @@ typedef struct {
     char radio_action[768];
     char title[SOURCE_TEXT_MAX];   /* name of the item being opened (folder name) */
     bool push_history;    /* remember the current view so BACK can return to it */
+    bool append;          /* more of the list on screen (scrolled near its end) */
     int queue_op;         /* QUEUE_OP_* for SOURCE_LOAD_* requests */
 } source_request_t;
 
@@ -182,6 +190,10 @@ typedef struct {
 static QueueHandle_t source_queue = NULL;
 static lv_obj_t *source_overlay = NULL;
 static lv_obj_t *source_track_list = NULL;
+/* Scroll area for the two-column menus and the album-cover grid. */
+static lv_obj_t *source_menu_list = NULL;
+#define SOURCE_MENU_LIST_Y      80
+#define SOURCE_MENU_LIST_H      (PANEL_H - 82 - SOURCE_MENU_LIST_Y)
 static lv_obj_t *source_title_label = NULL;
 static lv_obj_t *source_detail_album_label = NULL;
 static lv_obj_t *source_detail_album_caption = NULL;
@@ -200,7 +212,10 @@ static lv_obj_t *source_select_count_label = NULL;
 static lv_obj_t *source_back_button = NULL;
 static lv_obj_t *source_close_button = NULL;
 static lv_obj_t *source_empty_label = NULL;
-static lv_obj_t *source_item_buttons[SOURCE_MAX_TRACKS] = { NULL };
+static lv_obj_t **source_item_buttons = NULL;   /* SOURCE_ITEM_CAP, in PSRAM */
+static volatile uint8_t *source_grid_want = NULL;   /* SOURCE_ITEM_CAP, in PSRAM */
+static volatile bool     source_loading_more = false; /* an append request is on its way */
+static int               source_vl_count = 0;          /* items the virtual list may draw */
 static source_item_t *source_items = NULL;
 static int source_item_count = 0;
 static source_mode_t source_current_mode = SOURCE_ROOT;
@@ -456,21 +471,25 @@ static bool source_init_items(void)
     if (source_items != NULL) return true;
 
     source_items = (source_item_t *)heap_caps_calloc(
-        SOURCE_MAX_TRACKS,
+        SOURCE_ITEM_CAP,
         sizeof(source_item_t),
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
     );
+    source_item_buttons = (lv_obj_t **)heap_caps_calloc(SOURCE_ITEM_CAP, sizeof(lv_obj_t *),
+                                                         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    source_grid_want = (volatile uint8_t *)heap_caps_calloc(SOURCE_ITEM_CAP, 1,
+                                                            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 
-    if (source_items == NULL) {
+    if (source_items == NULL || source_item_buttons == NULL || source_grid_want == NULL) {
         ESP_LOGE(TAG,
                  "Could not allocate source item buffer in PSRAM (%u bytes)",
-                 (unsigned)(SOURCE_MAX_TRACKS * sizeof(source_item_t)));
+                 (unsigned)(SOURCE_ITEM_CAP * sizeof(source_item_t)));
         return false;
     }
 
     ESP_LOGI(TAG,
              "Source item buffer allocated in PSRAM: %u bytes",
-             (unsigned)(SOURCE_MAX_TRACKS * sizeof(source_item_t)));
+             (unsigned)(SOURCE_ITEM_CAP * sizeof(source_item_t)));
     return true;
 }
 
@@ -507,8 +526,9 @@ static void source_set_title(const char *title)
 /* ---- album cover grid (Albums, an artist's / a genre's albums) ---- */
 #define SOURCE_GRID_COLS   5
 #define SOURCE_GRID_COVER  136
-static uint8_t          *source_grid_pixels[SOURCE_MAX_ITEMS];
-static lv_image_dsc_t    source_grid_dsc[SOURCE_MAX_ITEMS];
+/* Covers belong to their tile (freed when the tile is deleted).  want[i]:
+ * 1 = tile i is on screen and needs its cover, 2 = no cover / failed. */
+static volatile int      source_vl_first_index = 0;  /* first item drawn, for the cover fetcher */
 static volatile uint32_t source_grid_gen = 0;      /* bumped on every redraw */
 
 static bool source_grid_mode(void)
@@ -518,22 +538,33 @@ static bool source_grid_mode(void)
            source_current_mode == SOURCE_GENRE_ALBUMS;
 }
 
+/* Virtual list state (15_queue_save_and_browser_query.c, source_vl_*). */
+static struct {
+    lv_obj_t *list;       /* the scroll area in use, NULL = not active */
+    lv_obj_t *spacer;     /* sets the scrollable height                */
+    int cols, row_h, y0, x0, dx, view_h;
+    bool grid, detail, album_detail;
+    int first, last;      /* items currently built: [first, last)      */
+} source_vl;
+
 static void source_clear_items(void)
 {
-    /* The array is SOURCE_MAX_TRACKS long so it can hold a full album. */
-    for (int i = 0; i < SOURCE_MAX_TRACKS; i++) {
+    /* No virtual list until the next view starts one. */
+    source_vl.list = NULL;
+    source_vl.first = source_vl.last = 0;
+    source_vl_count = 0;
+    source_loading_more = false;
+    if (source_vl.spacer != NULL) lv_obj_set_pos(source_vl.spacer, 0, 0);
+
+    /* Only the rows in view exist, but any of the list's items may be one. */
+    for (int i = 0; source_item_buttons != NULL && i < SOURCE_ITEM_CAP; i++) {
         if (source_item_buttons[i] != NULL) {
             lv_obj_del(source_item_buttons[i]);
             source_item_buttons[i] = NULL;
         }
     }
-    /* The tiles that showed these covers are gone, so the covers can go too. */
-    for (int i = 0; i < SOURCE_MAX_ITEMS; i++) {
-        if (source_grid_pixels[i] != NULL) {
-            heap_caps_free(source_grid_pixels[i]);
-            source_grid_pixels[i] = NULL;
-        }
-    }
+    /* (Deleting a tile frees its cover - see source_tile_delete_cb.) */
+    if (source_grid_want != NULL) memset((void *)source_grid_want, 0, SOURCE_ITEM_CAP);
     source_grid_gen++;
     for (int i = 0; i < SOURCE_QUEUE_PAGE; i++) {       /* children of the rows just deleted */
         queue_row_more[i] = NULL;
@@ -542,6 +573,20 @@ static void source_clear_items(void)
     source_queue_busy = false;                          /* the view is being redrawn */
     source_item_count = 0;
     source_clear_art();
+}
+
+/* Lists that grow as they are scrolled (fetched in pieces from Lyrion). */
+static bool source_list_grows(void)
+{
+    switch (source_current_mode) {
+        case SOURCE_ARTISTS: case SOURCE_ALBUMS: case SOURCE_GENRES: case SOURCE_FOLDERS:
+        case SOURCE_FAVORITES: case SOURCE_ARTIST_ALBUMS: case SOURCE_GENRE_ALBUMS:
+        case SOURCE_FOLDER_CONTENT: case SOURCE_FAVORITE_CONTENT: case SOURCE_PLAYLISTS:
+        case SOURCE_RADIO_MENU:
+            return true;
+        default:
+            return false;
+    }
 }
 
 static void source_update_page_controls(void)
@@ -562,9 +607,16 @@ static void source_update_page_controls(void)
     }
     if (source_select_bar != NULL && source_select_mode) lv_obj_move_foreground(source_select_bar);
 
-    /* In track view we scroll instead of page — hide the nav buttons */
+    /* In track view we scroll instead of page - hide the nav buttons.
+     * Other lists scroll too; PREV / NEXT only show for very long lists. */
+    /* A list that grows as it scrolls needs PREV / NEXT only past
+     * SOURCE_ITEM_CAP items. */
+    const bool grows_more = source_has_next && source_list_grows() &&
+                            source_item_count < SOURCE_ITEM_CAP;
+    const bool one_page = (source_page_offset <= 0 && (!source_has_next || grows_more));
+    const bool hide_paging = is_track_view || one_page;
     if (source_prev_button != NULL) {
-        if (is_track_view) lv_obj_add_flag(source_prev_button, LV_OBJ_FLAG_HIDDEN);
+        if (hide_paging) lv_obj_add_flag(source_prev_button, LV_OBJ_FLAG_HIDDEN);
         else {
             lv_obj_clear_flag(source_prev_button, LV_OBJ_FLAG_HIDDEN);
             if (source_page_offset > 0) lv_obj_clear_state(source_prev_button, LV_STATE_DISABLED);
@@ -572,7 +624,7 @@ static void source_update_page_controls(void)
         }
     }
     if (source_next_button != NULL) {
-        if (is_track_view) lv_obj_add_flag(source_next_button, LV_OBJ_FLAG_HIDDEN);
+        if (hide_paging) lv_obj_add_flag(source_next_button, LV_OBJ_FLAG_HIDDEN);
         else {
             lv_obj_clear_flag(source_next_button, LV_OBJ_FLAG_HIDDEN);
             if (source_has_next) lv_obj_clear_state(source_next_button, LV_STATE_DISABLED);
@@ -644,7 +696,10 @@ static void source_update_page_controls(void)
         } else {
             lv_obj_clear_flag(source_page_label, LV_OBJ_FLAG_HIDDEN);
             char text[48];
-            if (source_item_count > 0) {
+            if (source_item_count > 0 && one_page) {
+                snprintf(text, sizeof(text), "%d%s item%s", source_item_count,
+                         grows_more ? "+" : "", source_item_count == 1 ? "" : "s");
+            } else if (source_item_count > 0) {
                 snprintf(text, sizeof(text), "Items %d-%d",
                          source_page_offset + 1,
                          source_page_offset + source_item_count);
@@ -659,8 +714,11 @@ static void source_update_page_controls(void)
 /* How far PREV / NEXT move: the Queue shows 7 per page, the rest 10. */
 static int source_page_step(void)
 {
-    return (source_current_mode == SOURCE_QUEUE || source_current_mode == SOURCE_PLAYLIST_TRACKS)
-           ? SOURCE_QUEUE_PAGE : SOURCE_MAX_ITEMS;
+    if (source_current_mode == SOURCE_QUEUE || source_current_mode == SOURCE_PLAYLIST_TRACKS) {
+        return SOURCE_QUEUE_PAGE;
+    }
+    /* Grown lists: past everything that is loaded (or back as far). */
+    return source_item_count > SOURCE_MAX_ITEMS ? source_item_count : SOURCE_MAX_ITEMS;
 }
 
 static void source_prev_event_cb(lv_event_t *e)
@@ -670,7 +728,8 @@ static void source_prev_event_cb(lv_event_t *e)
     source_request_t request = {
         .mode = source_current_mode,
         .id = 0,
-        .offset = source_page_offset - source_page_step(),
+        .offset = source_page_offset - source_page_step() > 0
+                  ? source_page_offset - source_page_step() : 0,
         .push_history = false
     };
     if (source_current_mode == SOURCE_ARTIST_ALBUMS ||
@@ -723,6 +782,7 @@ static void source_hide(void)
 {
     if (source_overlay != NULL) {
         qs_hide();
+        source_grid_gen++;                         /* the cover fetcher can stop */
         lv_obj_add_flag(source_overlay, LV_OBJ_FLAG_HIDDEN);
         ui_schedule_repaint(lv_screen_active());
         lvgl_mem_log("SOURCE closed");

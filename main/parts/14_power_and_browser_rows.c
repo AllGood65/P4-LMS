@@ -81,6 +81,7 @@ static void lyrion_command_task(void *arg)
         alarm_amp_tick();                    /* "Amp on for alarms" (18c_alarms.c) */
         sleep_amp_tick();                    /* "Amp off with the sleep timer" (18b) */
         weather_tick();                      /* Weather screensaver (18w) */
+        np_power_poll();                     /* Now Playing power button (11) */
         if (rooms_open) {
             rooms_poll_all();
         }
@@ -1203,6 +1204,7 @@ static void source_hide_detail_widgets(void)
     if (source_detail_fav_button != NULL)    lv_obj_add_flag(source_detail_fav_button, LV_OBJ_FLAG_HIDDEN);
     if (source_detail_track_count != NULL)   lv_obj_add_flag(source_detail_track_count, LV_OBJ_FLAG_HIDDEN);
     if (source_track_list != NULL)           lv_obj_add_flag(source_track_list, LV_OBJ_FLAG_HIDDEN);
+    if (source_menu_list != NULL)            lv_obj_add_flag(source_menu_list, LV_OBJ_FLAG_HIDDEN);
     source_clear_art();
 }
 
@@ -1214,7 +1216,8 @@ static void source_diag_log(const char *what)
              "internal_free=%u psram_free=%u",
              what, (int)source_current_mode, source_item_count,
              source_overlay ? (unsigned)lv_obj_get_child_count(source_overlay) : 0U,
-             source_track_list ? (unsigned)lv_obj_get_child_count(source_track_list) : 0U,
+             (source_track_list ? (unsigned)lv_obj_get_child_count(source_track_list) : 0U) +
+             (source_menu_list ? (unsigned)lv_obj_get_child_count(source_menu_list) : 0U),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 #else
@@ -1267,21 +1270,26 @@ static void source_show_root(void)
     }
     source_item_count = entry_count;
 
+    /* In the scroll area, so all of them (Search too) can be reached. */
+    if (source_menu_list != NULL) {
+        lv_obj_clear_flag(source_menu_list, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_scroll_to_y(source_menu_list, 0, LV_ANIM_OFF);
+    }
     for (int i = 0; i < source_item_count; i++) {
         int col = i % 2;
         int row = i / 2;
 
         source_item_buttons[i] = create_button(
-            source_overlay,
+            source_menu_list != NULL ? source_menu_list : source_overlay,
             source_items[i].title,
             SOURCE_BUTTON_W,
-            SOURCE_BUTTON_H
+            source_menu_list != NULL ? 64 : SOURCE_BUTTON_H
         );
 
         lv_obj_set_pos(
             source_item_buttons[i],
             SOURCE_GRID_X0 + col * SOURCE_GRID_DX,
-            100 + row * 88
+            source_menu_list != NULL ? 6 + row * 74 : 100 + row * 88
         );
 
         /* Large, easy-to-hit home buttons. */
@@ -1402,7 +1410,7 @@ static void source_add_item(
     source_mode_t action,
     const char *title)
 {
-    if (source_item_count >= SOURCE_MAX_ITEMS || title == NULL) return;
+    if (source_item_count >= SOURCE_ITEM_CAP || title == NULL) return;
 
     source_item_t *item = &source_items[source_item_count++];
     item->id = id;
@@ -1420,7 +1428,7 @@ static void source_add_favorite_item(
     source_mode_t action,
     const char *title)
 {
-    if (source_item_count >= SOURCE_MAX_ITEMS || title == NULL || item_id == NULL) return;
+    if (source_item_count >= SOURCE_ITEM_CAP || title == NULL || item_id == NULL) return;
 
     source_item_t *item = &source_items[source_item_count++];
     item->id = 0;

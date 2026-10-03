@@ -249,9 +249,62 @@ static void vu_update_peak_marker(lv_obj_t *marker, int peak, int y, int *last_x
     }
 }
 
+/* VU meter on Now Playing on or off (Settings > Visualizer).  Off covers it
+ * with a plain panel saying VISUALIZER - a tap there still opens the
+ * visualizer.  NVS "vu_show" (u8, default 1). */
+#define VU_SHOW_NVS_KEY "vu_show"
+static bool vu_meter_shown = true;
+static lv_obj_t *vu_panel_obj = NULL;
+static lv_obj_t *vu_off_cover = NULL;
+
+static void vu_apply_shown(void)
+{
+    if (vu_off_cover == NULL) return;
+    if (vu_meter_shown) lv_obj_add_flag(vu_off_cover, LV_OBJ_FLAG_HIDDEN);
+    else {
+        lv_obj_clear_flag(vu_off_cover, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(vu_off_cover);
+    }
+    if (vu_panel_obj != NULL) lv_obj_invalidate(vu_panel_obj);
+}
+
+static void vu_shown_save(void)
+{
+    nvs_handle_t nvs;
+    if (nvs_open(PLAYER_NVS_NAMESPACE, NVS_READWRITE, &nvs) != ESP_OK) return;
+    if (nvs_set_u8(nvs, VU_SHOW_NVS_KEY, vu_meter_shown ? 1 : 0) == ESP_OK) nvs_commit(nvs);
+    nvs_close(nvs);
+}
+
+/* The cover for "VU meter off", made once the meter panel exists (main.c). */
+static void vu_off_cover_create(lv_obj_t *panel)
+{
+    vu_panel_obj = panel;
+    vu_off_cover = lv_obj_create(panel);
+    lv_obj_remove_style_all(vu_off_cover);
+    lv_obj_set_size(vu_off_cover, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(vu_off_cover, lv_color_hex(UI_PANEL_ALT), 0);
+    lv_obj_set_style_bg_opa(vu_off_cover, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(vu_off_cover, 4, 0);
+    lv_obj_center(vu_off_cover);
+    lv_obj_clear_flag(vu_off_cover, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(vu_off_cover, LV_OBJ_FLAG_EVENT_BUBBLE);      /* the tap reaches the panel */
+    lv_obj_t *l = lv_label_create(vu_off_cover);
+    lv_label_set_text(l, LV_SYMBOL_AUDIO "   VISUALIZER");
+    lv_obj_set_style_text_font(l, &p4_font_16, 0);
+    lv_obj_set_style_text_color(l, lv_color_hex(UI_TEXT_DIM), 0);
+    lv_obj_center(l);
+    lv_obj_clear_flag(l, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(l, LV_OBJ_FLAG_EVENT_BUBBLE);
+    vu_apply_shown();
+}
+
 static void vu_meter_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
+
+    /* Meter switched off in Settings: nothing to draw. */
+    if (!vu_meter_shown) return;
 
     /* A full-screen overlay is hiding the meter: nothing to animate. */
     if (screensaver_active || visualizer_visible) {
@@ -500,6 +553,8 @@ static void visualizer_style_load(void)
             vis_palette_selected = pal;
             vis_palette_active = pal;
         }
+        uint8_t shown = 1;
+        if (nvs_get_u8(nvs, VU_SHOW_NVS_KEY, &shown) == ESP_OK) vu_meter_shown = (shown != 0);
         nvs_close(nvs);
     }
 }

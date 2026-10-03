@@ -569,6 +569,12 @@ static void room_system_event_cb(lv_event_t *e)
     const bool both = (hs->amp_entity != NULL && hs->preamp_entity != NULL);
     c->sys_touch = lv_tick_get();
     c->sys_hold = (both ? (uint32_t)hs->delay_s * 1000u : 0u) + ROOM_TOUCH_HOLD_MS;
+    if (i == current_player_index) {          /* the Now Playing power button follows */
+        np_power_want = on;
+        np_power_touch = c->sys_touch;
+        np_power_hold = c->sys_hold + 1000u;
+        np_power_apply_locked();
+    }
 
     const bool pre_leads = (on != hs->amp_first);
     char msg[96];

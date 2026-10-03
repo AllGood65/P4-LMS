@@ -8,8 +8,8 @@ A 7" touchscreen controller for whole-house music, built on a Waveshare ESP32-P4
 
 - **Now Playing:** cover art, track info, play/pause/skip, volume, and a live VU meter from the board's microphone
 - **Rooms:** every player on one screen, with what's playing, its volume, one-tap room switching and grouping rooms to play in sync
-- **System power:** one switch per room turns the amp (and an optional pre-amp) on and off through Home Assistant, in a configurable order with a delay, so there's no speaker thump
-- **Music browsing:** artists, albums with cover art, genres, folders, search, favourites, and picking several songs at once
+- **System power:** one switch per room turns the amp (and an optional pre-amp) on and off through Home Assistant, in a configurable order with a delay, so there's no speaker thump. A power button on Now Playing does the same for the current room
+- **Music browsing:** artists, albums with cover art, genres, folders, search, favourites, and picking several songs at once. Lists scroll and keep loading as you go, even in large libraries
 - **Queue editing:** move songs, play next, remove, favourite, add to a playlist
 - **Saved playlists:** create, add to, reorder, rename, and play from any song
 - **Internet radio and apps,** including YouTube search (with Lyrion's YouTube plugin)

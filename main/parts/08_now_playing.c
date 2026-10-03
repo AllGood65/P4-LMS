@@ -95,6 +95,7 @@ static void player_select(int index)
     /* This callback already runs in LVGL's locked context.  Do not try to
      * acquire the display mutex again here. */
     update_player_button_styles_locked();
+    np_power_room_changed();
 
 
     /*

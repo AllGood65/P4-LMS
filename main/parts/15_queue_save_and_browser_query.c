@@ -300,101 +300,121 @@ static void source_play_context_event_cb(lv_event_t *e)
     xQueueSend(source_queue, &request, 0);
 }
 
-/* Albums as a 5 x 2 grid of covers.  Each tile's children, in order:
- * 0 placeholder, 1 cover image (hidden until it arrives), 2 title,
- * 3 artist, 4 "+" button.  Covers are fetched afterwards by the browser
- * task (source_grid_fetch_covers). */
-static void source_render_grid(void)
+/* ---- album tile ---- */
+typedef struct { uint8_t *pixels; lv_image_dsc_t dsc; } source_tile_cover_t;
+
+/* A tile scrolled away (or the view changed): free its cover with it. */
+static void source_tile_delete_cb(lv_event_t *e)
 {
-    const int tile_w = 174, tile_h = 176, x0 = 30, y0 = 84;
-    for (int i = 0; i < source_item_count && i < SOURCE_MAX_ITEMS; i++) {
-        const int col = i % SOURCE_GRID_COLS, row = i / SOURCE_GRID_COLS;
-        lv_obj_t *tile = lv_obj_create(source_overlay);
-        lv_obj_remove_style_all(tile);
-        lv_obj_set_size(tile, tile_w - 10, tile_h);
-        lv_obj_set_pos(tile, x0 + col * tile_w, y0 + row * (tile_h + 2));
-        lv_obj_set_style_radius(tile, 12, 0);
-        lv_obj_set_style_bg_color(tile, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
-        lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, LV_STATE_PRESSED);
-        lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_flag(tile, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_event_cb(tile, source_item_event_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
-
-        lv_obj_t *ph = lv_obj_create(tile);                                   /* 0 */
-        lv_obj_remove_style_all(ph);
-        lv_obj_set_size(ph, SOURCE_GRID_COVER, SOURCE_GRID_COVER);
-        lv_obj_set_pos(ph, 14, 0);
-        lv_obj_set_style_bg_color(ph, lv_color_hex(UI_ALBUM_BG), 0);
-        lv_obj_set_style_bg_opa(ph, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(ph, 8, 0);
-        lv_obj_clear_flag(ph, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_t *note = lv_label_create(ph);
-        lv_label_set_text(note, LV_SYMBOL_AUDIO);
-        lv_obj_set_style_text_color(note, lv_color_hex(UI_TEXT_DIM), 0);
-        lv_obj_set_style_text_font(note, &p4_font_28, 0);
-        lv_obj_center(note);
-
-        lv_obj_t *img = lv_image_create(tile);                                /* 1 */
-        lv_obj_set_pos(img, 14, 0);
-        lv_obj_clear_flag(img, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_flag(img, LV_OBJ_FLAG_HIDDEN);
-
-        char clean[SOURCE_TEXT_MAX];
-        source_strip_audio_extension(source_items[i].title, clean, sizeof(clean));
-        lv_obj_t *title = lv_label_create(tile);                              /* 2 */
-        lv_label_set_text(title, clean);
-        lv_obj_set_width(title, SOURCE_GRID_COVER + 4);
-        lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
-        lv_obj_set_style_text_font(title, &p4_font_14, 0);
-        label_one_line(title);
-        lv_obj_set_style_text_color(title, lv_color_hex(UI_TEXT), 0);
-        lv_obj_set_pos(title, 14, SOURCE_GRID_COVER + 4);
-
-        lv_obj_t *artist = lv_label_create(tile);                             /* 3 */
-        lv_label_set_text(artist, source_items[i].subtitle);
-        lv_obj_set_width(artist, SOURCE_GRID_COVER + 4);
-        lv_label_set_long_mode(artist, LV_LABEL_LONG_DOT);
-        lv_obj_set_style_text_font(artist, &p4_font_14, 0);
-        label_one_line(artist);
-        lv_obj_set_style_text_color(artist, lv_color_hex(UI_TEXT_SOFT), 0);
-        lv_obj_set_pos(artist, 14, SOURCE_GRID_COVER + 20);
-
-        lv_obj_t *plus = lv_obj_create(tile);                                 /* 4 */
-        lv_obj_remove_style_all(plus);
-        lv_obj_set_size(plus, 34, 34);
-        lv_obj_set_pos(plus, 14 + SOURCE_GRID_COVER - 40, SOURCE_GRID_COVER - 40);
-        lv_obj_set_style_bg_color(plus, lv_color_hex(UI_ACCENT), 0);
-        lv_obj_set_style_bg_opa(plus, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(plus, 8, 0);
-        lv_obj_set_style_bg_color(plus, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
-        lv_obj_clear_flag(plus, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_flag(plus, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_ext_click_area(plus, 6);
-        lv_obj_t *pl = lv_label_create(plus);
-        lv_label_set_text(pl, LV_SYMBOL_PLUS);
-        lv_obj_set_style_text_color(pl, lv_color_hex(UI_ON_ACCENT), 0);
-        lv_obj_center(pl);
-        lv_obj_add_event_cb(plus, source_plus_event_cb, LV_EVENT_SHORT_CLICKED, (void *)(intptr_t)i);
-        lv_obj_add_event_cb(plus, source_plus_event_cb, LV_EVENT_LONG_PRESSED, (void *)(intptr_t)i);
-
-        source_item_buttons[i] = tile;
+    const int i = (int)(intptr_t)lv_event_get_user_data(e);
+    lv_obj_t *tile = (lv_obj_t *)lv_event_get_target(e);
+    source_tile_cover_t *cv = (source_tile_cover_t *)lv_obj_get_user_data(tile);
+    if (cv != NULL) {
+        if (cv->pixels != NULL) heap_caps_free(cv->pixels);
+        heap_caps_free(cv);
+        lv_obj_set_user_data(tile, NULL);
     }
+    if (i >= 0 && i < SOURCE_ITEM_CAP && source_grid_want[i] == 1) source_grid_want[i] = 0;
+}
+
+/* One album tile.  Children, in order: 0 placeholder, 1 cover image (hidden
+ * until it arrives), 2 title, 3 artist, 4 "+" button.  The cover is fetched
+ * afterwards by the browser task (source_grid_fetch_covers). */
+static lv_obj_t *source_build_tile(int i, lv_obj_t *parent)
+{
+    const int tile_w = 174, tile_h = 176;
+    lv_obj_t *tile = lv_obj_create(parent);
+    lv_obj_remove_style_all(tile);
+    lv_obj_set_size(tile, tile_w - 10, tile_h);
+    lv_obj_set_style_radius(tile, 12, 0);
+    lv_obj_set_style_bg_color(tile, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, LV_STATE_PRESSED);
+    lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(tile, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(tile, source_item_event_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+    lv_obj_add_event_cb(tile, source_tile_delete_cb, LV_EVENT_DELETE, (void *)(intptr_t)i);
+
+    lv_obj_t *ph = lv_obj_create(tile);                                   /* 0 */
+    lv_obj_remove_style_all(ph);
+    lv_obj_set_size(ph, SOURCE_GRID_COVER, SOURCE_GRID_COVER);
+    lv_obj_set_pos(ph, 14, 0);
+    lv_obj_set_style_bg_color(ph, lv_color_hex(UI_ALBUM_BG), 0);
+    lv_obj_set_style_bg_opa(ph, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(ph, 8, 0);
+    lv_obj_clear_flag(ph, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *note = lv_label_create(ph);
+    lv_label_set_text(note, LV_SYMBOL_AUDIO);
+    lv_obj_set_style_text_color(note, lv_color_hex(UI_TEXT_DIM), 0);
+    lv_obj_set_style_text_font(note, &p4_font_28, 0);
+    lv_obj_center(note);
+
+    lv_obj_t *img = lv_image_create(tile);                                /* 1 */
+    lv_obj_set_pos(img, 14, 0);
+    lv_obj_clear_flag(img, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(img, LV_OBJ_FLAG_HIDDEN);
+
+    char clean[SOURCE_TEXT_MAX];
+    source_strip_audio_extension(source_items[i].title, clean, sizeof(clean));
+    lv_obj_t *title = lv_label_create(tile);                              /* 2 */
+    lv_label_set_text(title, clean);
+    lv_obj_set_width(title, SOURCE_GRID_COVER + 4);
+    lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(title, &p4_font_14, 0);
+    label_one_line(title);
+    lv_obj_set_style_text_color(title, lv_color_hex(UI_TEXT), 0);
+    lv_obj_set_pos(title, 14, SOURCE_GRID_COVER + 4);
+
+    lv_obj_t *artist = lv_label_create(tile);                             /* 3 */
+    lv_label_set_text(artist, source_items[i].subtitle);
+    lv_obj_set_width(artist, SOURCE_GRID_COVER + 4);
+    lv_label_set_long_mode(artist, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(artist, &p4_font_14, 0);
+    label_one_line(artist);
+    lv_obj_set_style_text_color(artist, lv_color_hex(UI_TEXT_SOFT), 0);
+    lv_obj_set_pos(artist, 14, SOURCE_GRID_COVER + 20);
+
+    lv_obj_t *plus = lv_obj_create(tile);                                 /* 4 */
+    lv_obj_remove_style_all(plus);
+    lv_obj_set_size(plus, 34, 34);
+    lv_obj_set_pos(plus, 14 + SOURCE_GRID_COVER - 40, SOURCE_GRID_COVER - 40);
+    lv_obj_set_style_bg_color(plus, lv_color_hex(UI_ACCENT), 0);
+    lv_obj_set_style_bg_opa(plus, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(plus, 8, 0);
+    lv_obj_set_style_bg_color(plus, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
+    lv_obj_clear_flag(plus, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(plus, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(plus, 6);
+    lv_obj_t *pl = lv_label_create(plus);
+    lv_label_set_text(pl, LV_SYMBOL_PLUS);
+    lv_obj_set_style_text_color(pl, lv_color_hex(UI_ON_ACCENT), 0);
+    lv_obj_center(pl);
+    lv_obj_add_event_cb(plus, source_plus_event_cb, LV_EVENT_SHORT_CLICKED, (void *)(intptr_t)i);
+    lv_obj_add_event_cb(plus, source_plus_event_cb, LV_EVENT_LONG_PRESSED, (void *)(intptr_t)i);
+
+    source_grid_want[i] = source_items[i].cover_key[0] ? 1 : 2;
+    return tile;
 }
 
 /* A grid cover arrives (browser task -> LVGL task).  Dropped if the page
- * changed meanwhile; then the task frees the pixels. */
+ * changed or the tile scrolled away meanwhile; then the task frees it. */
 typedef struct { uint32_t gen; int index; uint8_t *pixels; uint32_t w, h, padded; size_t size; bool shown; } grid_cover_ctx_t;
 
 static void source_grid_cover_job(void *arg)
 {
     grid_cover_ctx_t *c = (grid_cover_ctx_t *)arg;
-    if (c->gen != source_grid_gen || c->index < 0 || c->index >= SOURCE_MAX_ITEMS) return;
+    if (c->gen != source_grid_gen || c->index < 0 || c->index >= SOURCE_ITEM_CAP) return;
     lv_obj_t *tile = source_item_buttons[c->index];
     if (tile == NULL || source_overlay == NULL || lv_obj_has_flag(source_overlay, LV_OBJ_FLAG_HIDDEN)) return;
 
-    if (source_grid_pixels[c->index] != NULL) heap_caps_free(source_grid_pixels[c->index]);
-    source_grid_pixels[c->index] = c->pixels;
-    lv_image_dsc_t *d = &source_grid_dsc[c->index];
+    source_tile_cover_t *cv = (source_tile_cover_t *)lv_obj_get_user_data(tile);
+    if (cv == NULL) {
+        cv = (source_tile_cover_t *)heap_caps_calloc(1, sizeof(*cv), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (cv == NULL) return;
+        lv_obj_set_user_data(tile, cv);
+    }
+    if (cv->pixels != NULL) heap_caps_free(cv->pixels);
+    cv->pixels = c->pixels;
+    lv_image_dsc_t *d = &cv->dsc;
     memset(d, 0, sizeof(*d));
     d->header.cf = LV_COLOR_FORMAT_RGB565;
     d->header.w = c->w;
@@ -406,33 +426,167 @@ static void source_grid_cover_job(void *arg)
     lv_image_set_src(img, d);
     lv_obj_clear_flag(img, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(lv_obj_get_child(tile, 0), LV_OBJ_FLAG_HIDDEN);
+    source_grid_want[c->index] = 0;
     c->shown = true;
 }
 
-/* Fetch the page's covers one by one; stop as soon as the user asks for
- * something else (a new request is waiting) or the page is redrawn. */
+/* Fetch covers for the tiles on screen, nearest the top first, for as long
+ * as this grid is showing; stop as soon as the user asks for something else
+ * (a new request is waiting) or the grid is redrawn or closed. */
 static void source_grid_fetch_covers(void)
 {
     const uint32_t gen = source_grid_gen;
-    int shown = 0, missing = 0, failed = 0;
-    for (int i = 0; i < source_item_count && i < SOURCE_MAX_ITEMS; i++) {
-        if (gen != source_grid_gen || uxQueueMessagesWaiting(source_queue) > 0) return;
-        const char *key = source_items[i].cover_key;
-        if (!key[0]) { missing++; continue; }
-        grid_cover_ctx_t c = { .gen = gen, .index = i };
+    int shown = 0, failed = 0;
+    while (gen == source_grid_gen && uxQueueMessagesWaiting(source_queue) == 0) {
+        const int count = source_vl_count;
+        int pick = -1;
+        const int start = source_vl_first_index;
+        for (int k = 0; k < count && pick < 0; k++) {
+            const int i = (start + k) % count;
+            if (source_grid_want[i] == 1) pick = i;
+        }
+        if (pick < 0) {                          /* all done for now: wait for a scroll */
+            vTaskDelay(pdMS_TO_TICKS(120));
+            continue;
+        }
+        char key[sizeof(source_items[0].cover_key)];
+        snprintf(key, sizeof(key), "%s", source_items[pick].cover_key);
+        grid_cover_ctx_t c = { .gen = gen, .index = pick };
         if (!source_download_cover(key, SOURCE_GRID_COVER, &c.pixels, &c.w, &c.h, &c.padded, &c.size)) {
             if (failed++ == 0) {
                 ESP_LOGW(TAG, "Grid cover: could not load %s/music/%s/cover_%dx%d.png",
                          LYRION_SERVER_BASE, key, SOURCE_GRID_COVER, SOURCE_GRID_COVER);
             }
+            if (gen == source_grid_gen) source_grid_want[pick] = 2;
             continue;
         }
-        shown++;
         ui_call(source_grid_cover_job, &c);
-        if (!c.shown) heap_caps_free(c.pixels);
+        if (c.shown) shown++;
+        else {
+            heap_caps_free(c.pixels);
+            /* The tile scrolled away before its cover arrived: try again
+             * if it comes back. */
+            if (gen == source_grid_gen && source_grid_want[pick] == 1 && source_item_buttons[pick] == NULL) {
+                source_grid_want[pick] = 0;
+            }
+        }
     }
-    ESP_LOGI(TAG, "Grid covers: %d shown, %d failed, %d without a cover id", shown, failed, missing);
+    ESP_LOGI(TAG, "Grid covers: %d shown, %d failed", shown, failed);
 }
+
+/* ---- virtual list: only the rows on (or near) the screen exist ----------
+ * Long lists are kept in source_items (PSRAM); as the list scrolls, rows
+ * coming into view are built and rows far out of view are deleted, so
+ * opening a list of 200 takes no longer, and no more memory, than 20. */
+static lv_obj_t *source_build_row(int i, lv_obj_t *parent, bool detail_layout, bool album_detail);
+
+
+/* Near the end of a list that has more: fetch the next piece. */
+static void source_vl_load_more(void)
+{
+    if (source_loading_more || !source_has_next || !source_list_grows() ||
+        source_vl_count >= SOURCE_ITEM_CAP || source_queue == NULL) return;
+    source_request_t request = {
+        .mode = source_current_mode,
+        .id = 0,
+        .offset = source_page_offset + source_vl_count,
+        .push_history = false,
+        .append = true
+    };
+    if (source_current_mode == SOURCE_ARTIST_ALBUMS ||
+        source_current_mode == SOURCE_GENRE_ALBUMS ||
+        source_current_mode == SOURCE_FOLDER_CONTENT ||
+        source_current_mode == SOURCE_FAVORITE_CONTENT) {
+        request.id = source_parent_id;
+    }
+    snprintf(request.item_id, sizeof(request.item_id), "%s", source_parent_item_id);
+    snprintf(request.title, sizeof(request.title), "%s", source_folder_title);
+    if (source_current_mode == SOURCE_RADIO_MENU) {
+        snprintf(request.radio_action, sizeof(request.radio_action), "%s", source_radio_current_action);
+    }
+    if (xQueueSend(source_queue, &request, 0) == pdTRUE) {
+        source_loading_more = true;
+        if (source_page_label != NULL) lv_label_set_text(source_page_label, "Loading more...");
+    }
+}
+
+static void source_vl_update(void)
+{
+    if (source_vl.list == NULL || lv_obj_has_flag(source_vl.list, LV_OBJ_FLAG_HIDDEN)) return;
+    const int count = source_vl_count;
+    const int sy = lv_obj_get_scroll_y(source_vl.list);
+    int r0 = (sy - source_vl.y0) / source_vl.row_h - 2;
+    int r1 = (sy + source_vl.view_h - source_vl.y0) / source_vl.row_h + 2;
+    if (r0 < 0) r0 = 0;
+    int first = r0 * source_vl.cols;
+    int last = (r1 + 1) * source_vl.cols;
+    if (last > count) last = count;
+    if (first > last) first = last;
+
+    /* Delete rows that left the window ... */
+    for (int i = source_vl.first; i < source_vl.last; i++) {
+        if ((i < first || i >= last) && source_item_buttons[i] != NULL) {
+            lv_obj_del(source_item_buttons[i]);
+            source_item_buttons[i] = NULL;
+        }
+    }
+    /* ... and build the ones that came in. */
+    for (int i = first; i < last; i++) {
+        if (source_item_buttons[i] != NULL) continue;
+        lv_obj_t *o = source_vl.grid ? source_build_tile(i, source_vl.list)
+                                     : source_build_row(i, source_vl.list, source_vl.detail, source_vl.album_detail);
+        source_item_buttons[i] = o;
+        const int col = i % source_vl.cols, row = i / source_vl.cols;
+        lv_obj_set_pos(o, source_vl.x0 + col * source_vl.dx, source_vl.y0 + row * source_vl.row_h);
+    }
+    source_vl.first = first;
+    source_vl.last = last;
+    source_vl_first_index = first;
+
+    /* About six rows from the end: get the next piece of the list. */
+    if (count > 0 && last >= count - source_vl.cols * 6) source_vl_load_more();
+}
+
+static void source_vl_scroll_cb(lv_event_t *e)
+{
+    if (lv_event_get_target(e) == source_vl.list) source_vl_update();
+}
+
+/* Start a virtual list in `list` for the current items. */
+static void source_vl_start(lv_obj_t *list, int view_h, int cols, int x0, int dx, int y0, int row_h,
+                            bool grid, bool detail, bool album_detail, int keep_scroll)
+{
+    source_vl.list = list;
+    source_vl.view_h = view_h;
+    source_vl.cols = cols;
+    source_vl.x0 = x0;
+    source_vl.dx = dx;
+    source_vl.y0 = y0;
+    source_vl.row_h = row_h;
+    source_vl.grid = grid;
+    source_vl.detail = detail;
+    source_vl.album_detail = album_detail;
+    source_vl.first = 0;
+    source_vl.last = 0;
+    source_vl_count = source_item_count;
+
+    /* An invisible object at the bottom gives the list its full height. */
+    if (source_vl.spacer == NULL) {
+        source_vl.spacer = lv_obj_create(list);
+        lv_obj_remove_style_all(source_vl.spacer);
+        lv_obj_clear_flag(source_vl.spacer, LV_OBJ_FLAG_CLICKABLE);
+    } else if (lv_obj_get_parent(source_vl.spacer) != list) {
+        lv_obj_set_parent(source_vl.spacer, list);
+    }
+    const int rows = (source_item_count + cols - 1) / cols;
+    lv_obj_set_size(source_vl.spacer, 1, 1);
+    lv_obj_set_pos(source_vl.spacer, 0, y0 + rows * row_h);
+
+    lv_obj_update_layout(list);
+    lv_obj_scroll_to_y(list, keep_scroll > 0 ? keep_scroll : 0, LV_ANIM_OFF);
+    source_vl_update();
+}
+
 
 /* The Queue: one song per row, full width.  Tap a row to play that song;
  * "..." on a row opens its move controls (14_power_and_browser_rows.c). */
@@ -492,11 +646,167 @@ static void source_render_queue(void)
     queue_rows_apply_selection();
 }
 
+/* One list row (two-column menus, or a song in an album / folder). */
+static lv_obj_t *source_build_row(int i, lv_obj_t *parent, bool detail_layout, bool album_detail)
+{
+    char display_text[SOURCE_TEXT_MAX + 40];
+    char clean_title[SOURCE_TEXT_MAX];
+
+    source_strip_audio_extension(source_items[i].title,
+                                  clean_title, sizeof(clean_title));
+
+    if (album_detail) {
+        snprintf(display_text, sizeof(display_text), "%s",
+                 clean_title);
+    } else if (source_items[i].action == SOURCE_ALBUM_TRACKS) {
+        /* Album names are intentionally shown cleanly, without a type prefix. */
+        snprintf(display_text, sizeof(display_text), "%s",
+                 clean_title);
+    } else if (source_items[i].action == SOURCE_FOLDER_CONTENT) {
+        /* Folder names are intentionally shown cleanly, without a type prefix. */
+        snprintf(display_text, sizeof(display_text), "%s",
+                 clean_title);
+    } else if (source_items[i].action == SOURCE_LOAD_TRACK) {
+        /* Songs are shown with a small music icon; keep the title clean. */
+        snprintf(display_text, sizeof(display_text), "%s",
+                 clean_title);
+    } else if (source_items[i].action == SOURCE_LOAD_PLAYLIST) {
+        /* Playlists show a music icon instead of a text prefix. */
+        snprintf(display_text, sizeof(display_text), "%s",
+                 clean_title);
+    } else if (source_items[i].action == SOURCE_FAVORITE_CONTENT) {
+        /* Favorite folders are shown simply by their names. */
+        snprintf(display_text, sizeof(display_text), "%s",
+                 clean_title);
+    } else if (source_items[i].action == SOURCE_LOAD_FAVORITE ||
+               source_items[i].action == SOURCE_LOAD_FAVORITE_URL) {
+        /* Favorite stations/items are shown simply by their names. */
+        snprintf(display_text, sizeof(display_text), "%s",
+                 clean_title);
+    } else if (source_items[i].action == SOURCE_RADIO_MENU ||
+               source_items[i].action == SOURCE_RADIO_PLAY) {
+        /* Radio menus show a folder icon, stations a music icon. */
+        snprintf(display_text, sizeof(display_text), "%s",
+                 clean_title);
+    } else {
+        snprintf(display_text, sizeof(display_text), "%s",
+                 clean_title);
+    }
+
+    /* Folder and song indicators keep the names clean while making the
+     * source browser immediately readable. */
+    /* Show a folder icon for anything that opens another collection/view.
+     * This keeps Artists, Genres, Albums, Music Folders, and Favorites
+     * visually consistent instead of making folder icons appear only
+     * inside the Music Folders browser.  Actual songs keep the music-note
+     * icon. */
+    bool show_folder_icon =
+        source_items[i].action == SOURCE_ARTIST_ALBUMS ||
+        source_items[i].action == SOURCE_GENRE_ALBUMS ||
+        source_items[i].action == SOURCE_FOLDER_CONTENT ||
+        source_items[i].action == SOURCE_ALBUM_TRACKS ||
+        source_items[i].action == SOURCE_FAVORITE_CONTENT ||
+        source_items[i].action == SOURCE_RADIO_MENU;
+    bool show_song_icon =
+        source_items[i].action == SOURCE_LOAD_TRACK ||
+        source_items[i].action == SOURCE_LOAD_PLAYLIST ||
+        source_items[i].action == SOURCE_LOAD_FAVORITE ||
+        source_items[i].action == SOURCE_LOAD_FAVORITE_URL ||
+        source_items[i].action == SOURCE_RADIO_PLAY ||
+        source_items[i].action == SOURCE_QUEUE_JUMP;
+
+    lv_obj_t *btn = create_source_item_button(
+        parent,
+        display_text,
+        detail_layout ? 630 : SOURCE_BUTTON_W,
+        detail_layout ? SOURCE_TRACK_BUTTON_H : SOURCE_MENU_BUTTON_H,
+        show_folder_icon,
+        show_song_icon
+    );
+
+    /* Playlists get a list icon, so they are not mistaken for songs. */
+    if (source_items[i].action == SOURCE_LOAD_PLAYLIST) {
+        lv_obj_t *icon = lv_obj_get_child(btn, 1);
+        if (icon != NULL && lv_obj_check_type(icon, &lv_label_class)) {
+            lv_label_set_text(icon, LV_SYMBOL_LIST);
+        }
+    }
+
+    lv_obj_add_event_cb(btn,
+                        source_item_event_cb,
+                        LV_EVENT_CLICKED,
+                        (void *)(intptr_t)i);
+
+    const bool is_song = (source_items[i].action == SOURCE_LOAD_TRACK && source_items[i].id > 0);
+    const bool is_fav_row = (source_current_mode == SOURCE_FAVORITES ||
+                             source_current_mode == SOURCE_FAVORITE_CONTENT) &&
+                            (source_items[i].action == SOURCE_LOAD_FAVORITE ||
+                             source_items[i].action == SOURCE_LOAD_FAVORITE_URL);
+    const bool deletable_fav = is_fav_row &&
+        (source_items[i].fav_id[0] != '\0' || source_items[i].radio_play_json[0] != '\0');
+    const bool is_station = source_favorite_is_stream(&source_items[i]);
+
+    if (source_items[i].action == SOURCE_QUEUE_JUMP) {
+        source_add_row_button(btn, LV_SYMBOL_CLOSE,
+                              source_remove_event_cb, i, false, 0);
+    } else if (source_select_mode && is_song) {
+        /* SELECT: a tick circle instead of the buttons; the row toggles. */
+        source_add_select_circle(btn, source_sel_has(source_items[i].id));
+        if (source_items[i].queued) source_row_show_queued(btn, 1);
+    } else if (is_station) {
+        /* A stream never ends: play it or remove it, but don't queue it. */
+        lv_obj_t *icon = lv_obj_get_child(btn, 1);
+        if (icon != NULL && lv_obj_check_type(icon, &lv_label_class)) {
+            lv_label_set_text(icon, LV_SYMBOL_WIFI);
+        }
+        if (deletable_fav) {
+            source_add_row_button(btn, LV_SYMBOL_TRASH,
+                                  source_playlist_trash_event_cb, i, false, 0);
+        }
+    } else if (source_queue_mode_for(source_items[i].action) != SOURCE_ROOT) {
+        const bool queued = source_items[i].queued;
+        lv_obj_t *plus = source_add_row_button(btn,
+                                               queued ? LV_SYMBOL_OK : LV_SYMBOL_PLUS,
+                                               source_plus_event_cb, i, true, 0);
+        /* Saved playlists and favorites can also be deleted (with a
+         * confirming second tap). */
+        if ((source_current_mode == SOURCE_PLAYLISTS &&
+             source_items[i].action == SOURCE_LOAD_PLAYLIST) || deletable_fav) {
+            source_add_row_button(btn, LV_SYMBOL_TRASH,
+                                  source_playlist_trash_event_cb, i, false, 1);
+        }
+        /* (Songs go to Favorites through SELECT - no star per row.) */
+        if (queued && is_song) {
+            lv_obj_t *plus_label = lv_obj_get_child(plus, 0);
+            if (plus_label != NULL) lv_obj_set_user_data(plus_label, (void *)1);
+            source_style_queued_button(plus);
+            source_row_show_queued(btn, 1);
+        }
+    }
+    return btn;
+}
+
 static void source_render_items(void)
 {
     /* Caller already owns the LVGL lock.  Never call bsp_display_lock()
      * from this function or from helpers it invokes. */
     int parsed_count = source_item_count;
+    source_loading_more = false;
+
+    /* Redrawing the same list (e.g. SELECT ticks) keeps its scroll position;
+     * a different list starts at the top. */
+    static int last_view_key = -1, last_offset = -1;
+    static char last_title[64] = "";
+    const char *title_now = source_title_label != NULL ? lv_label_get_text(source_title_label) : "";
+    int keep_scroll = 0;
+    if (source_menu_list != NULL && source_view_key() == last_view_key &&
+        source_page_offset == last_offset && strncmp(title_now, last_title, sizeof(last_title) - 1) == 0) {
+        keep_scroll = lv_obj_get_scroll_y(source_menu_list);
+    }
+    last_view_key = source_view_key();
+    last_offset = source_page_offset;
+    snprintf(last_title, sizeof(last_title), "%s", title_now);
+
     source_clear_items();
     source_item_count = parsed_count;
 
@@ -577,8 +887,22 @@ static void source_render_items(void)
         }
     }
 
+    /* Menus and the album grid scroll inside source_menu_list. */
+    const bool menu_view = !detail_layout &&
+                           source_current_mode != SOURCE_PLAYLIST_TRACKS &&
+                           source_current_mode != SOURCE_QUEUE;
+    if (source_menu_list != NULL) {
+        if (menu_view) {
+            lv_obj_clear_flag(source_menu_list, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_scroll_to_y(source_menu_list, 0, LV_ANIM_OFF);
+        } else {
+            lv_obj_add_flag(source_menu_list, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
     if (source_grid_mode()) {
-        source_render_grid();
+        source_vl_start(source_menu_list, SOURCE_MENU_LIST_H, SOURCE_GRID_COLS, 30, 174, 4, 178,
+                        true, false, false, keep_scroll);
         if (source_nav_bar != NULL) lv_obj_move_foreground(source_nav_bar);
         source_update_page_controls();
         source_diag_log("grid");
@@ -604,154 +928,14 @@ static void source_render_items(void)
         return;
     }
 
-    for (int i = 0; i < source_item_count; i++) {
-        int col = i % 2;
-        int row = i / 2;
-        char display_text[SOURCE_TEXT_MAX + 40];
-        char clean_title[SOURCE_TEXT_MAX];
-
-        source_strip_audio_extension(source_items[i].title,
-                                      clean_title, sizeof(clean_title));
-
-        if (album_detail) {
-            snprintf(display_text, sizeof(display_text), "%s",
-                     clean_title);
-        } else if (source_items[i].action == SOURCE_ALBUM_TRACKS) {
-            /* Album names are intentionally shown cleanly, without a type prefix. */
-            snprintf(display_text, sizeof(display_text), "%s",
-                     clean_title);
-        } else if (source_items[i].action == SOURCE_FOLDER_CONTENT) {
-            /* Folder names are intentionally shown cleanly, without a type prefix. */
-            snprintf(display_text, sizeof(display_text), "%s",
-                     clean_title);
-        } else if (source_items[i].action == SOURCE_LOAD_TRACK) {
-            /* Songs are shown with a small music icon; keep the title clean. */
-            snprintf(display_text, sizeof(display_text), "%s",
-                     clean_title);
-        } else if (source_items[i].action == SOURCE_LOAD_PLAYLIST) {
-            /* Playlists show a music icon instead of a text prefix. */
-            snprintf(display_text, sizeof(display_text), "%s",
-                     clean_title);
-        } else if (source_items[i].action == SOURCE_FAVORITE_CONTENT) {
-            /* Favorite folders are shown simply by their names. */
-            snprintf(display_text, sizeof(display_text), "%s",
-                     clean_title);
-        } else if (source_items[i].action == SOURCE_LOAD_FAVORITE ||
-                   source_items[i].action == SOURCE_LOAD_FAVORITE_URL) {
-            /* Favorite stations/items are shown simply by their names. */
-            snprintf(display_text, sizeof(display_text), "%s",
-                     clean_title);
-        } else if (source_items[i].action == SOURCE_RADIO_MENU ||
-                   source_items[i].action == SOURCE_RADIO_PLAY) {
-            /* Radio menus show a folder icon, stations a music icon. */
-            snprintf(display_text, sizeof(display_text), "%s",
-                     clean_title);
-        } else {
-            snprintf(display_text, sizeof(display_text), "%s",
-                     clean_title);
-        }
-
-        /* Folder and song indicators keep the names clean while making the
-         * source browser immediately readable. */
-        /* Show a folder icon for anything that opens another collection/view.
-         * This keeps Artists, Genres, Albums, Music Folders, and Favorites
-         * visually consistent instead of making folder icons appear only
-         * inside the Music Folders browser.  Actual songs keep the music-note
-         * icon. */
-        bool show_folder_icon =
-            source_items[i].action == SOURCE_ARTIST_ALBUMS ||
-            source_items[i].action == SOURCE_GENRE_ALBUMS ||
-            source_items[i].action == SOURCE_FOLDER_CONTENT ||
-            source_items[i].action == SOURCE_ALBUM_TRACKS ||
-            source_items[i].action == SOURCE_FAVORITE_CONTENT ||
-            source_items[i].action == SOURCE_RADIO_MENU;
-        bool show_song_icon =
-            source_items[i].action == SOURCE_LOAD_TRACK ||
-            source_items[i].action == SOURCE_LOAD_PLAYLIST ||
-            source_items[i].action == SOURCE_LOAD_FAVORITE ||
-            source_items[i].action == SOURCE_LOAD_FAVORITE_URL ||
-            source_items[i].action == SOURCE_RADIO_PLAY ||
-            source_items[i].action == SOURCE_QUEUE_JUMP;
-
-        source_item_buttons[i] = create_source_item_button(
-            detail_layout && source_track_list != NULL ? source_track_list : source_overlay,
-            display_text,
-            detail_layout ? 630 : SOURCE_BUTTON_W,
-            detail_layout ? SOURCE_TRACK_BUTTON_H : SOURCE_MENU_BUTTON_H,
-            show_folder_icon,
-            show_song_icon
-        );
-
-        /* Playlists get a list icon, so they are not mistaken for songs. */
-        if (source_items[i].action == SOURCE_LOAD_PLAYLIST) {
-            lv_obj_t *icon = lv_obj_get_child(source_item_buttons[i], 1);
-            if (icon != NULL && lv_obj_check_type(icon, &lv_label_class)) {
-                lv_label_set_text(icon, LV_SYMBOL_LIST);
-            }
-        }
-
-        if (detail_layout) {
-            /* Album/folder detail is a single-column track list.  The old
-             * code used row=i/2 but a fixed X position, which caused tracks
-             * 6, 7, 8... to be drawn directly on top of tracks 1, 2, 3.... */
-            lv_obj_set_pos(source_item_buttons[i], 0, i * SOURCE_TRACK_ROW_H);
-        } else {
-            lv_obj_set_pos(source_item_buttons[i],
-                           SOURCE_GRID_X0 + col * SOURCE_GRID_DX,
-                           100 + row * SOURCE_MENU_ROW_H);
-        }
-        lv_obj_add_event_cb(source_item_buttons[i],
-                            source_item_event_cb,
-                            LV_EVENT_CLICKED,
-                            (void *)(intptr_t)i);
-
-        const bool is_song = (source_items[i].action == SOURCE_LOAD_TRACK && source_items[i].id > 0);
-        const bool is_fav_row = (source_current_mode == SOURCE_FAVORITES ||
-                                 source_current_mode == SOURCE_FAVORITE_CONTENT) &&
-                                (source_items[i].action == SOURCE_LOAD_FAVORITE ||
-                                 source_items[i].action == SOURCE_LOAD_FAVORITE_URL);
-        const bool deletable_fav = is_fav_row &&
-            (source_items[i].fav_id[0] != '\0' || source_items[i].radio_play_json[0] != '\0');
-        const bool is_station = source_favorite_is_stream(&source_items[i]);
-
-        if (source_items[i].action == SOURCE_QUEUE_JUMP) {
-            source_add_row_button(source_item_buttons[i], LV_SYMBOL_CLOSE,
-                                  source_remove_event_cb, i, false, 0);
-        } else if (source_select_mode && is_song) {
-            /* SELECT: a tick circle instead of the buttons; the row toggles. */
-            source_add_select_circle(source_item_buttons[i], source_sel_has(source_items[i].id));
-            if (source_items[i].queued) source_row_show_queued(source_item_buttons[i], 1);
-        } else if (is_station) {
-            /* A stream never ends: play it or remove it, but don't queue it. */
-            lv_obj_t *icon = lv_obj_get_child(source_item_buttons[i], 1);
-            if (icon != NULL && lv_obj_check_type(icon, &lv_label_class)) {
-                lv_label_set_text(icon, LV_SYMBOL_WIFI);
-            }
-            if (deletable_fav) {
-                source_add_row_button(source_item_buttons[i], LV_SYMBOL_TRASH,
-                                      source_playlist_trash_event_cb, i, false, 0);
-            }
-        } else if (source_queue_mode_for(source_items[i].action) != SOURCE_ROOT) {
-            const bool queued = source_items[i].queued;
-            lv_obj_t *plus = source_add_row_button(source_item_buttons[i],
-                                                   queued ? LV_SYMBOL_OK : LV_SYMBOL_PLUS,
-                                                   source_plus_event_cb, i, true, 0);
-            /* Saved playlists and favorites can also be deleted (with a
-             * confirming second tap). */
-            if ((source_current_mode == SOURCE_PLAYLISTS &&
-                 source_items[i].action == SOURCE_LOAD_PLAYLIST) || deletable_fav) {
-                source_add_row_button(source_item_buttons[i], LV_SYMBOL_TRASH,
-                                      source_playlist_trash_event_cb, i, false, 1);
-            }
-            /* (Songs go to Favorites through SELECT - no star per row.) */
-            if (queued && is_song) {
-                lv_obj_t *plus_label = lv_obj_get_child(plus, 0);
-                if (plus_label != NULL) lv_obj_set_user_data(plus_label, (void *)1);
-                source_style_queued_button(plus);
-                source_row_show_queued(source_item_buttons[i], 1);
-            }
-        }
+    if (detail_layout) {
+        source_vl_start(source_track_list, SOURCE_TRACK_LIST_H, 1, 0, 0, 0, SOURCE_TRACK_ROW_H,
+                        false, true, album_detail, 0);
+    } else {
+        source_vl_start(source_menu_list, SOURCE_MENU_LIST_H, 2, SOURCE_GRID_X0, SOURCE_GRID_DX,
+                        14, SOURCE_MENU_ROW_H, false, false, false, keep_scroll);
     }
+
 
     /* Item buttons are created after the nav bar, so explicitly restore the
      * nav bar to the foreground after every render.  This is especially
@@ -960,7 +1144,7 @@ static cJSON *source_radio_item_params(cJSON *entry, const cJSON *action, bool f
 
 static void source_radio_add_item(cJSON *entry, const cJSON *base_actions)
 {
-    if (entry == NULL || source_item_count >= SOURCE_MAX_ITEMS) return;
+    if (entry == NULL || source_item_count >= SOURCE_ITEM_CAP) return;
 
     cJSON *text = cJSON_GetObjectItem(entry, "text");
     if (!cJSON_IsString(text)) text = cJSON_GetObjectItem(entry, "name");
@@ -1153,10 +1337,25 @@ static void qs_status_from_task(const char *text, uint32_t color, bool close_soo
 
 /* Show a message in place of the list (used when the server cannot be
  * reached or answers with something unusable). */
+typedef struct { int count; } source_more_failed_ctx_t;
+static void source_more_failed_job(void *arg)
+{
+    /* Keep the list that is on screen; scrolling to the end tries again. */
+    source_item_count = ((const source_more_failed_ctx_t *)arg)->count;
+    source_loading_more = false;
+    source_update_page_controls();
+}
+
 static void source_show_error(const source_request_t *request,
                               source_mode_t display_mode,
                               const char *message)
 {
+    if (request->append) {
+        ESP_LOGW(TAG, "Loading more of the list failed: %s", message);
+        source_more_failed_ctx_t c = { .count = source_vl_count };
+        ui_call(source_more_failed_job, &c);
+        return;
+    }
     source_commit_view(request, display_mode);
 
     source_error_ctx_t ctx = { .mode = display_mode, .message = message };
@@ -1574,6 +1773,13 @@ static void source_query_and_render(source_request_t request)
         return;
     }
 
+    /* "More of this list" is only wanted if that list is still showing. */
+    if (request.append && (request.mode != source_current_mode || source_vl_count <= 0)) {
+        heap_caps_free(response);
+        source_loading_more = false;
+        return;
+    }
+
     if (request.mode == SOURCE_ROOT) {
         ui_call(source_show_root_job, NULL);
         heap_caps_free(response);
@@ -1883,8 +2089,13 @@ static void source_query_and_render(source_request_t request)
     heap_caps_free(response);  /* everything needed is now in the cJSON tree */
     response = NULL;
 
-    source_item_count = 0;
-    source_artwork_track_id = 0;
+    /* More of the same list (scrolled near its end): add after what is there. */
+    if (request.append) {
+        source_item_count = source_vl_count;
+    } else {
+        source_item_count = 0;
+        source_artwork_track_id = 0;
+    }
     source_has_next = false;
     int first_album_track_id = 0;
     int first_folder_track_id = 0;
@@ -2090,7 +2301,10 @@ static void source_query_and_render(source_request_t request)
 
     cJSON_Delete(root);
 
-    source_commit_view(&request, display_mode);
+    if (source_item_count >= SOURCE_ITEM_CAP) {
+        ESP_LOGI(TAG, "List reached %d items; NEXT shows the rest", SOURCE_ITEM_CAP);
+    }
+    if (!request.append) source_commit_view(&request, display_mode);
 
     if (request.mode == SOURCE_RADIO_MENU) {
         if (request.item_id[0] != '\0') {

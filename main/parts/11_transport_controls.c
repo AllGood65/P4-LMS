@@ -246,3 +246,128 @@ static void volume_slider_event_cb(lv_event_t *e)
 }
 
 
+
+
+/* ============================================================
+ * SYSTEM POWER BUTTON (Now Playing)
+ *
+ * Switches the current room's amp + pre-amp on or off, in the room's order
+ * (the same as "System power" on the Rooms screen).  Lit when everything it
+ * switches is on; hidden for rooms without power switches.  The command
+ * task reads the switches every few seconds (np_power_poll).
+ * ============================================================ */
+static lv_obj_t *np_power_button = NULL;
+static int       np_power_state = -1;          /* -1 not known yet, 0 off, 1 on */
+static bool      np_power_want = false;        /* what the last tap asked for   */
+static uint32_t  np_power_touch = 0;
+static uint32_t  np_power_hold = 0;            /* ignore polls this long after a tap */
+static volatile bool np_power_poll_now = true;
+
+static void np_power_refresh_soon(void) { np_power_poll_now = true; }
+
+static void np_power_apply_locked(void)
+{
+    if (np_power_button == NULL) return;
+    const ha_player_switches_t *sw = ha_switches_for_current();
+    if ((sw->amp_entity == NULL && sw->preamp_entity == NULL) || !HA_TOKEN_SET) {
+        lv_obj_add_flag(np_power_button, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    lv_obj_clear_flag(np_power_button, LV_OBJ_FLAG_HIDDEN);
+
+    int st = np_power_state;
+    if (np_power_hold > 0 && lv_tick_elaps(np_power_touch) < np_power_hold) st = np_power_want ? 1 : 0;
+    const bool on = (st == 1);
+    lv_obj_set_style_bg_color(np_power_button, lv_color_hex(on ? UI_ACCENT : UI_BUTTON), LV_PART_MAIN);
+    lv_obj_set_style_border_color(np_power_button, lv_color_hex(on ? UI_ACCENT_GLOW : UI_EDGE), LV_PART_MAIN);
+    lv_obj_t *label = lv_obj_get_child(np_power_button, 0);
+    if (label != NULL) {
+        lv_obj_set_style_text_color(label, lv_color_hex(on ? UI_ON_ACCENT : UI_TEXT_DIM), 0);
+    }
+}
+
+/* A different room was chosen: its state isn't known yet. */
+static void np_power_room_changed(void)
+{
+    np_power_state = -1;
+    np_power_hold = 0;
+    np_power_poll_now = true;
+    np_power_apply_locked();
+}
+
+static void np_power_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    const int room = current_player_index;
+    const ha_player_switches_t *hs = ha_switches_for_current();
+    const bool shown_on = (np_power_hold > 0 && lv_tick_elaps(np_power_touch) < np_power_hold)
+                          ? np_power_want : (np_power_state == 1);
+    const bool on = !shown_on;
+    if ((hs->amp_entity == NULL && hs->preamp_entity == NULL) || !HA_TOKEN_SET || !queue_ha_system(room, on)) {
+        ui_toast(HA_TOKEN_SET ? "Couldn't reach Home Assistant" : "Set the Home Assistant token on the web page");
+        return;
+    }
+    /* Show the new state straight away; polls can't flip it back until the
+     * second switch has had time to follow. */
+    const bool both = (hs->amp_entity != NULL && hs->preamp_entity != NULL);
+    np_power_want = on;
+    np_power_touch = lv_tick_get();
+    np_power_hold = (both ? (uint32_t)hs->delay_s * 1000u : 0u) + 5000u;
+    np_power_apply_locked();
+
+    const bool pre_leads = (on != hs->amp_first);
+    char msg[96];
+    if (!both) {
+        snprintf(msg, sizeof(msg), "%s: %s %s", lyrion_players[room].short_name,
+                 hs->amp_entity != NULL ? "amp" : "pre-amp", on ? "on" : "off");
+    } else if (hs->delay_s == 0) {
+        snprintf(msg, sizeof(msg), "%s: %s, then %s %s", lyrion_players[room].short_name,
+                 pre_leads ? "pre-amp" : "amp", pre_leads ? "amp" : "pre-amp", on ? "on" : "off");
+    } else {
+        snprintf(msg, sizeof(msg), "%s: %s %s, %s in %u s", lyrion_players[room].short_name,
+                 pre_leads ? "pre-amp" : "amp", on ? "on" : "off", pre_leads ? "amp" : "pre-amp",
+                 (unsigned)hs->delay_s);
+    }
+    ui_toast(msg);
+}
+
+typedef struct { int room; int state; } np_power_msg_t;
+
+static void np_power_job(void *arg)
+{
+    const np_power_msg_t *m = (const np_power_msg_t *)arg;
+    if (m->room != current_player_index) return;      /* the room changed meanwhile */
+    if (m->state >= 0) np_power_state = m->state;
+    np_power_apply_locked();
+}
+
+/* Command task: read the current room's switches every few seconds (not
+ * while the screensaver is up; much less often if Home Assistant can't be
+ * reached, so Lyrion commands are never held up for long). */
+static void np_power_poll(void)
+{
+    static TickType_t next = 0;
+    const TickType_t now = xTaskGetTickCount();
+    if (np_power_button == NULL || screensaver_active || !wifi_have_ip) return;
+    if (!np_power_poll_now && (int32_t)(now - next) < 0) return;
+    np_power_poll_now = false;
+
+    const int room = current_player_index;
+    const ha_player_switches_t *sw = ha_switches_for_index(room);
+    if ((sw->amp_entity == NULL && sw->preamp_entity == NULL) || !HA_TOKEN_SET) {
+        next = now + pdMS_TO_TICKS(8000);
+        np_power_msg_t m = { .room = room, .state = -1 };
+        ui_post(np_power_job, &m, sizeof(m));          /* hides the button */
+        return;
+    }
+    bool ok = true, all_on = true, st = false;
+    if (sw->amp_entity != NULL) {
+        if (ha_switch_get_state(sw->amp_entity, &st)) all_on = all_on && st; else ok = false;
+    }
+    if (ok && sw->preamp_entity != NULL) {
+        if (ha_switch_get_state(sw->preamp_entity, &st)) all_on = all_on && st; else ok = false;
+    }
+    next = now + pdMS_TO_TICKS(ok ? 8000 : 60000);
+    np_power_msg_t m = { .room = room, .state = ok ? (all_on ? 1 : 0) : -1 };
+    ui_post(np_power_job, &m, sizeof(m));
+}

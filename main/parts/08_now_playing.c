@@ -222,6 +222,9 @@ static void format_time_value(
  * ALBUM ART
  * ============================================================ */
 
+/* HTTP status of the last cover download (404: the server has no picture). */
+static int album_art_last_status = 0;
+
 static void clear_album_art_job(void *arg)
 {
     (void)arg;
@@ -387,6 +390,7 @@ static bool update_album_art_fetch(const char *player_id, bool want_png)
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
 
+    album_art_last_status = status_code;
     if (status_code != 200 || response.length < 4) {
         ESP_LOGW(
             TAG,
@@ -705,7 +709,14 @@ static void playback_render_locked(double elapsed, double duration)
     char text[24];                           /* room for "-" + the longest time */
 
     format_time_value(elapsed, text, sizeof(text));
-    ui_set_label(elapsed_label, text);
+    if (duration > 0.0) {
+        ui_set_label(elapsed_label, text);
+    } else {
+        /* Radio (no length): "LIVE" and the time listened, no bar. */
+        char live[40];
+        snprintf(live, sizeof(live), "LIVE  %s", text);
+        ui_set_label(elapsed_label, ss_have_track ? live : "");
+    }
 
     /* The right-hand time counts down what's left of the song. */
     if (duration > 0.0) {
@@ -731,6 +742,8 @@ static void playback_render_locked(double elapsed, double duration)
         if (lv_bar_get_value(progress_bar) != permille) {
             lv_bar_set_value(progress_bar, permille, LV_ANIM_OFF);
         }
+        if (duration > 0.0) lv_obj_clear_flag(progress_bar, LV_OBJ_FLAG_HIDDEN);
+        else                lv_obj_add_flag(progress_bar, LV_OBJ_FLAG_HIDDEN);
 
         /* Handle follows the bar; hidden when there's no length (radio). */
         if (progress_knob != NULL) {
@@ -1102,8 +1115,15 @@ static void format_build_text(const cJSON *track, char *out, size_t out_size, bo
 
 /* Format badge + shuffle / repeat state, after each status poll. */
 static void update_lyrion_extras_ui_now(const char *format_text, bool lossless,
-                                        int shuffle, int repeat)
+                                        int shuffle, int repeat, bool live)
 {
+    /* A live stream has no order to shuffle or repeat: hide both. */
+    lv_obj_t *mode_btns[2] = { shuffle_button, repeat_button };
+    for (int i = 0; i < 2; i++) {
+        if (mode_btns[i] == NULL) continue;
+        if (live) lv_obj_add_flag(mode_btns[i], LV_OBJ_FLAG_HIDDEN);
+        else      lv_obj_clear_flag(mode_btns[i], LV_OBJ_FLAG_HIDDEN);
+    }
 
     if (format_label != NULL) {
         ui_set_label(format_label, format_text != NULL ? format_text : "");
@@ -1124,24 +1144,27 @@ static void update_lyrion_extras_ui_now(const char *format_text, bool lossless,
 
 }
 
-typedef struct { char format[96]; bool lossless; int shuffle; int repeat; } extras_msg_t;
+typedef struct { char format[96]; bool lossless; int shuffle; int repeat; bool live; } extras_msg_t;
 
 static void update_lyrion_extras_ui_job(void *arg)
 {
     const extras_msg_t *m = (const extras_msg_t *)arg;
-    update_lyrion_extras_ui_now(m->format, m->lossless, m->shuffle, m->repeat);
+    update_lyrion_extras_ui_now(m->format, m->lossless, m->shuffle, m->repeat, m->live);
 }
 
 static void update_lyrion_extras_ui(const char *format_text, bool lossless,
-                                    int shuffle, int repeat)
+                                    int shuffle, int repeat, bool live)
 {
     extras_msg_t m;
+    m.live = live;
     snprintf(m.format, sizeof(m.format), "%s", format_text ? format_text : "");
     m.lossless = lossless;
     m.shuffle = shuffle;
     m.repeat = repeat;
     ui_post(update_lyrion_extras_ui_job, &m, sizeof(m));
 }
+
+static void queue_mark_playing_job(void *arg);   /* 14_power_and_browser_rows.c */
 
 static bool lyrion_get_status(void)
 {
@@ -1588,6 +1611,7 @@ static bool lyrion_get_status(void)
      * the cover is only downloaded and decoded once per album. */
     char cover_key[96];
     cover_key[0] = '\0';
+    uint32_t art_url_hash = 0;      /* radio: the station's / show's picture address */
 
     char format_text[96];
     format_text[0] = '\0';
@@ -1606,6 +1630,13 @@ static bool lyrion_get_status(void)
         else if (cJSON_IsString(sh_j) && sh_j->valuestring) shuffle_now = atoi(sh_j->valuestring);
         if (cJSON_IsNumber(rp_j)) repeat_now = rp_j->valueint;
         else if (cJSON_IsString(rp_j) && rp_j->valuestring) repeat_now = atoi(rp_j->valuestring);
+
+        /* The open Queue follows the playing song. */
+        cJSON *ci_j = cJSON_GetObjectItem(result, "playlist_cur_index");
+        int cur_index = -1;
+        if (cJSON_IsNumber(ci_j)) cur_index = ci_j->valueint;
+        else if (cJSON_IsString(ci_j) && ci_j->valuestring) cur_index = atoi(ci_j->valuestring);
+        if (cur_index >= 0) ui_post(queue_mark_playing_job, &cur_index, sizeof(cur_index));
     }
 
 
@@ -1704,6 +1735,12 @@ static bool lyrion_get_status(void)
                     track,
                     "artwork_url"
                 );
+            if (cJSON_IsString(artwork_url_json) && artwork_url_json->valuestring != NULL) {
+                art_url_hash = 2166136261u;                       /* FNV-1a */
+                for (const char *c = artwork_url_json->valuestring; *c; c++) {
+                    art_url_hash = (art_url_hash ^ (uint8_t)*c) * 16777619u;
+                }
+            }
 
             if (coverid_json != NULL &&
                 cJSON_IsString(coverid_json) &&
@@ -1766,7 +1803,10 @@ static bool lyrion_get_status(void)
         album_id
     );
 
-    update_lyrion_extras_ui(format_text, format_lossless, shuffle_now, repeat_now);
+    /* Live radio: a stream with no length that isn't a file from the library. */
+    const bool live_stream = duration <= 0.0 && fav_url[0] != '\0' &&
+                             strncmp(fav_url, "file:", 5) != 0 && strncmp(fav_url, "db:", 3) != 0;
+    update_lyrion_extras_ui(format_text, format_lossless, shuffle_now, repeat_now, live_stream);
 
     /* FAV button: when the song / stream changes, ask (on the browser task)
      * whether it is already in Favorites. */
@@ -1790,12 +1830,18 @@ static bool lyrion_get_status(void)
     char album_art_key[256];
 
     if (cover_key[0] != '\0') {
+        /* Radio: also the stream and its picture address, so a new station
+         * (or show) always counts as a new picture. */
+        uint32_t stream_hash = 2166136261u;
+        for (const char *c = fav_url; *c; c++) stream_hash = (stream_hash ^ (uint8_t)*c) * 16777619u;
         snprintf(
             album_art_key,
             sizeof(album_art_key),
-            "%s|%s",
+            "%s|%s|%08lx%08lx",
             player_id,
-            cover_key
+            cover_key,
+            (unsigned long)(duration > 0.0 ? 0 : stream_hash),
+            (unsigned long)art_url_hash
         );
     }
     else {
@@ -1810,10 +1856,30 @@ static bool lyrion_get_status(void)
         );
     }
 
-    if (strcmp(album_art_key, last_album_art_key) != 0) {
+    /* A cover that failed to download is tried again after 30 s, not on
+     * every poll. */
+    static char     art_failed_key[sizeof(album_art_key)] = "";
+    static char     art_shown_stream[sizeof(fav_url)] = "";   /* radio stream the shown picture came from */
+    static uint32_t art_failed_ms = 0;
+    static uint32_t art_recheck_ms = 0;    /* new station: look again a few seconds later */
+    const uint32_t  art_now_ms = esp_log_timestamp();
+
+    /* Right after a station change the server can still hand out the last
+     * station's picture, so a new station's picture is fetched once more. */
+    if (art_recheck_ms != 0 && (int32_t)(art_now_ms - art_recheck_ms) >= 0) {
+        art_recheck_ms = 0;
+        if (strcmp(album_art_key, last_album_art_key) == 0) {
+            ESP_LOGI(TAG, "Radio: checking the new station's picture again");
+            last_album_art_key[0] = '\0';
+        }
+    }
+
+    if (strcmp(album_art_key, last_album_art_key) != 0 &&
+        !(strcmp(album_art_key, art_failed_key) == 0 && art_now_ms - art_failed_ms < 30000U)) {
         ESP_LOGI(TAG, "Album-art change detected: [%s]", album_art_key);
 
         /* Keep the current cover until the replacement downloads and decodes successfully. */
+        album_art_last_status = 0;
         if (update_album_art(player_id)) {
             strncpy(
                 last_album_art_key,
@@ -1821,8 +1887,30 @@ static bool lyrion_get_status(void)
                 sizeof(last_album_art_key) - 1
             );
             last_album_art_key[sizeof(last_album_art_key) - 1] = '\0';
+            art_failed_key[0] = '\0';
+            if (duration <= 0.0 && strcmp(art_shown_stream, fav_url) != 0) {
+                art_recheck_ms = art_now_ms + 4000U;       /* a different station than before */
+                if (art_recheck_ms == 0) art_recheck_ms = 1;
+            }
+            snprintf(art_shown_stream, sizeof(art_shown_stream), "%s", duration > 0.0 ? "" : fav_url);
+        } else if (album_art_last_status == 404) {
+            /* The server has no picture for this one.  On the same radio
+             * station (an advert, or a song without a picture): keep the
+             * station's last picture.  Anything else: the empty frame, not
+             * the previous album's cover.  No retry either way. */
+            if (duration <= 0.0 && fav_url[0] != '\0' && strcmp(art_shown_stream, fav_url) == 0) {
+                ESP_LOGI(TAG, "Radio: no picture for this one; keeping the station's last one");
+            } else {
+                ESP_LOGI(TAG, "No picture for this one");
+                clear_album_art();
+                art_shown_stream[0] = '\0';
+            }
+            snprintf(last_album_art_key, sizeof(last_album_art_key), "%s", album_art_key);
+            art_failed_key[0] = '\0';
         } else {
-            ESP_LOGW(TAG, "Album-art update failed; keeping previous artwork");
+            ESP_LOGW(TAG, "Album-art update failed; keeping previous artwork (retry in 30 s)");
+            snprintf(art_failed_key, sizeof(art_failed_key), "%s", album_art_key);
+            art_failed_ms = art_now_ms;
         }
     }
 

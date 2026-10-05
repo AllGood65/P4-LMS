@@ -33,6 +33,11 @@
 #define WEB_NVS_BL_ART   "bl_art"
 #define WEB_NVS_ANIM     "anim"
 #define WEB_NVS_TZ       "tz"
+#define WEB_NVS_CLK_FONT "clk_font"
+#define WEB_NVS_CLK_SIZE "clk_size"
+#define WEB_NVS_CLK_FMT  "clk_fmt"
+#define WEB_NVS_CLK_DATE "clk_date"
+#define WEB_NVS_CLK_COL  "clk_col"
 
 /* Copy text into a fixed-size field, cutting it off if it's too long. */
 static void web_copy(char *dst, size_t dst_size, const char *src)
@@ -105,6 +110,11 @@ static void web_settings_load(void)
     if (nvs_get_u8(nvs, WEB_NVS_BL_ART, &v) == ESP_OK && v >= 1 && v <= 100) bl_art_pct = v;
     if (nvs_get_u8(nvs, WEB_NVS_ANIM, &v) == ESP_OK) ui_anim_on = (v != 0);
     if (nvs_get_u8(nvs, WEB_NVS_TZ, &v) == ESP_OK && v < TZ_CHOICES) { tz_index = v; time_apply_timezone(); }
+    if (nvs_get_u8(nvs, WEB_NVS_CLK_FONT, &v) == ESP_OK && v < SS_CLK_FONTS) ss_clk_font = v;
+    if (nvs_get_u8(nvs, WEB_NVS_CLK_SIZE, &v) == ESP_OK && v < SS_CLK_SIZES) ss_clk_size = v;
+    if (nvs_get_u8(nvs, WEB_NVS_CLK_FMT,  &v) == ESP_OK && v < SS_CLK_FMTS)  ss_clk_fmt  = v;
+    if (nvs_get_u8(nvs, WEB_NVS_CLK_DATE, &v) == ESP_OK && v < SS_CLK_DATES) ss_clk_date = v;
+    if (nvs_get_u8(nvs, WEB_NVS_CLK_COL,  &v) == ESP_OK && v < SS_CLK_COLS)  ss_clk_col  = v;
     nvs_close(nvs);
 
     ESP_LOGI(TAG, "Settings: Home Assistant %s (token %s), %d switch set(s), standby %u min / deep %u min",
@@ -128,7 +138,12 @@ static bool web_settings_save(void)
               nvs_set_u8(nvs, WEB_NVS_SS_PS, (uint8_t)ss_pause_mode) == ESP_OK &&
               nvs_set_u8(nvs, WEB_NVS_BL_ART, (uint8_t)bl_art_pct) == ESP_OK &&
               nvs_set_u8(nvs, WEB_NVS_ANIM, ui_anim_on ? 1 : 0) == ESP_OK &&
-              nvs_set_u8(nvs, WEB_NVS_TZ, (uint8_t)tz_index) == ESP_OK;
+              nvs_set_u8(nvs, WEB_NVS_TZ, (uint8_t)tz_index) == ESP_OK &&
+              nvs_set_u8(nvs, WEB_NVS_CLK_FONT, (uint8_t)ss_clk_font) == ESP_OK &&
+              nvs_set_u8(nvs, WEB_NVS_CLK_SIZE, (uint8_t)ss_clk_size) == ESP_OK &&
+              nvs_set_u8(nvs, WEB_NVS_CLK_FMT,  (uint8_t)ss_clk_fmt)  == ESP_OK &&
+              nvs_set_u8(nvs, WEB_NVS_CLK_DATE, (uint8_t)ss_clk_date) == ESP_OK &&
+              nvs_set_u8(nvs, WEB_NVS_CLK_COL,  (uint8_t)ss_clk_col)  == ESP_OK;
     if (ok) ok = nvs_commit(nvs) == ESP_OK;
     nvs_close(nvs);
     return ok;

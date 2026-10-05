@@ -1127,6 +1127,8 @@ static void ssp_create(lv_obj_t *screen);      /* 18d_screensaver_panel.c */
 static void ssp_show(void);
 static void ssp_hide(void);
 static void vsp_create(lv_obj_t *screen);
+static void csp_create(lv_obj_t *screen);
+static void csp_hide(void);
 static void vsp_show(void);
 static void vsp_hide(void);
 static lv_obj_t *alarms_overlay, *aed_overlay;
@@ -1282,6 +1284,7 @@ static void nav_hide_panels(void)
     alarms_hide();
     ssp_hide();
     vsp_hide();
+    csp_hide();
     if (sleep_overlay != NULL) lv_obj_add_flag(sleep_overlay, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -1317,7 +1320,7 @@ static int nav_current_tab(void)
     if (nav_visible(hub_overlay) || nav_visible(settings_overlay) ||
         nav_visible(wifi_overlay) || nav_visible(lms_overlay) ||
         nav_visible(alarms_overlay) || nav_visible(aed_overlay) ||
-        nav_visible(ssp_overlay) || nav_visible(vsp_overlay) ||
+        nav_visible(ssp_overlay) || nav_visible(vsp_overlay) || nav_visible(csp_overlay) ||
         nav_visible(sleep_overlay)) return TAB_SETTINGS;
     return TAB_NOW;
 }
@@ -1393,13 +1396,14 @@ static void nav_sync_timer_cb(lv_timer_t *t)
 
     /* Like the other panels, close after a minute without a touch. */
     if ((nav_visible(rooms_overlay) || nav_visible(hub_overlay) || nav_visible(alarms_overlay) ||
-         nav_visible(ssp_overlay) || nav_visible(vsp_overlay)) &&
+         nav_visible(ssp_overlay) || nav_visible(vsp_overlay) || nav_visible(csp_overlay)) &&
         lv_display_get_inactive_time(NULL) >= SOURCE_IDLE_CLOSE_MS) {
         rooms_hide();
         hub_hide();
         alarms_hide();
         ssp_hide();
         vsp_hide();
+        csp_hide();
     }
     if (sleep_overlay != NULL && !lv_obj_has_flag(sleep_overlay, LV_OBJ_FLAG_HIDDEN) &&
         lv_display_get_inactive_time(NULL) >= SOURCE_IDLE_CLOSE_MS) {
@@ -1421,6 +1425,7 @@ static void nav_create(lv_obj_t *screen)
     alarms_ui_create(screen);
     ssp_create(screen);
     vsp_create(screen);
+    csp_create(screen);
 
     nav_bar = lv_obj_create(screen);
     lv_obj_remove_style_all(nav_bar);

@@ -52,6 +52,11 @@ LV_FONT_DECLARE(p4_font_18)
 LV_FONT_DECLARE(p4_font_28)
 LV_FONT_DECLARE(p4_font_40)
 LV_FONT_DECLARE(p4_font_48)
+LV_FONT_DECLARE(p4_clock_montserrat)
+LV_FONT_DECLARE(p4_clock_oswald)
+LV_FONT_DECLARE(p4_clock_dseg7)
+LV_FONT_DECLARE(p4_clock_dmserif)
+LV_FONT_DECLARE(p4_clock_orbitron)
 #define P4_SYMBOL_STAR "\xEF\x80\x85"     /* U+F005, in the p4 fonts */
 
 #include "bsp/esp-bsp.h"

@@ -772,11 +772,7 @@ static void ss_wx_create(lv_obj_t *overlay)
 
 static void ss_wx_tick(void)
 {
-    if (screensaver_clock_label != NULL) {
-        const char *ck = lv_label_get_text(screensaver_clock_label);
-        while (*ck == ' ') ck++;
-        ui_set_label(ss_wx_clock, ck);
-    }
+    if (ss_art_clock != NULL) ui_set_label(ss_wx_clock, lv_label_get_text(ss_art_clock));
     time_t now = time(NULL);
     struct tm t;
     if (localtime_r(&now, &t) != NULL && time_is_valid(&t)) {

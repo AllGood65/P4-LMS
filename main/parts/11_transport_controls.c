@@ -263,7 +263,6 @@ static uint32_t  np_power_touch = 0;
 static uint32_t  np_power_hold = 0;            /* ignore polls this long after a tap */
 static volatile bool np_power_poll_now = true;
 
-static void np_power_refresh_soon(void) { np_power_poll_now = true; }
 
 static void np_power_apply_locked(void)
 {

@@ -739,6 +739,11 @@ static lv_obj_t *modal_text(lv_obj_t *p, const char *text, const lv_font_t *font
     return l;
 }
 
+/* The room a group was put together from: Ungroup all keeps the music
+ * there, even if you've since tapped another room (to switch its amp on,
+ * say).  -1 = not known (grouped elsewhere, or after a restart). */
+static int group_owner = -1;
+
 static void group_switch_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED) return;
@@ -748,12 +753,15 @@ static void group_switch_event_cb(lv_event_t *e)
     const bool on = lv_obj_has_state(group_switches[j], LV_STATE_CHECKED);
     char msg[80];
     if (on) {
+        group_owner = sel;                    /* this room started (or grew) the group */
         queue_lyrion_command_for(sel, LYRION_COMMAND_SYNC, j);
         snprintf(msg, sizeof(msg), "%s now plays with %s", lyrion_players[j].short_name,
                  lyrion_players[sel].short_name);
     } else {
+        /* The room leaves the group and goes quiet; this room keeps playing. */
         queue_lyrion_command_for(j, LYRION_COMMAND_UNSYNC, 0);
-        snprintf(msg, sizeof(msg), "%s plays on its own", lyrion_players[j].short_name);
+        queue_lyrion_command_for(j, LYRION_COMMAND_PAUSE, 0);
+        snprintf(msg, sizeof(msg), "%s left the group", lyrion_players[j].short_name);
     }
     ui_toast(msg);
 }
@@ -761,14 +769,32 @@ static void group_switch_event_cb(lv_event_t *e)
 static void group_ungroup_all_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    /* One room in each group keeps the music: the room the group was put
+     * together from, else the room you're in, else the group's first room.
+     * The others leave and go quiet (releasing every room let Lyrion keep a
+     * different one playing). */
+    const int sel = current_player_index;
+    const int owner = group_owner;
+    group_owner = -1;
     int sent = 0;
     for (int i = 0; i < lyrion_player_count; i++) {
-        if (rooms_group_mask[i] & ~(1 << i)) {
-            queue_lyrion_command_for(i, LYRION_COMMAND_UNSYNC, 0);
-            sent++;
+        const int mask = rooms_group_mask[i];
+        if (!(mask & ~(1 << i))) continue;                    /* not grouped */
+        int keeper;
+        if (owner >= 0 && owner < lyrion_player_count && (mask & (1 << owner))) {
+            keeper = owner;
+        } else if (sel >= 0 && sel < lyrion_player_count && (mask & (1 << sel))) {
+            keeper = sel;
+        } else {
+            keeper = 0;
+            while (keeper < lyrion_player_count && !(mask & (1 << keeper))) keeper++;
         }
+        if (i == keeper) continue;
+        queue_lyrion_command_for(i, LYRION_COMMAND_UNSYNC, 0);
+        queue_lyrion_command_for(i, LYRION_COMMAND_PAUSE, 0);
+        sent++;
     }
-    ui_toast(sent ? "Every room plays on its own" : "No rooms are grouped");
+    ui_toast(sent ? "Rooms ungrouped - the music stays here" : "No rooms are grouped");
     if (group_overlay != NULL) lv_obj_add_flag(group_overlay, LV_OBJ_FLAG_HIDDEN);
 }
 

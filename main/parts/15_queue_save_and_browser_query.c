@@ -510,6 +510,39 @@ static void source_vl_load_more(void)
     }
 }
 
+static void pl_row_add_controls(lv_obj_t *row, int i);      /* 18f_playlists.c */
+
+/* The queue and a playlist's songs: one full-width row per song, with
+ * "..." for its controls. */
+static bool source_song_rows(void)
+{
+    return source_vl.list == source_menu_list && !source_vl.grid &&
+           (source_current_mode == SOURCE_QUEUE || source_current_mode == SOURCE_PLAYLIST_TRACKS);
+}
+
+static lv_obj_t *source_build_song_row(int i, lv_obj_t *parent)
+{
+    char clean[SOURCE_TEXT_MAX];
+    source_strip_audio_extension(source_items[i].title, clean, sizeof(clean));
+    lv_obj_t *row = create_source_item_button(parent, clean, 870, SOURCE_QUEUE_ROW_H - 4, false, true);
+    lv_obj_add_event_cb(row, source_item_event_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+    if (source_current_mode == SOURCE_PLAYLIST_TRACKS) {
+        pl_row_add_controls(row, i);
+    } else {
+        queue_row_add_controls(row, i);
+        /* "NOW PLAYING" on the playing song's row (child QUEUE_ROW_TAG;
+         * queue_row_apply_one shows it). */
+        lv_obj_t *tag = lv_label_create(row);
+        lv_label_set_text(tag, "NOW PLAYING");
+        lv_obj_set_style_text_font(tag, &p4_font_14, 0);
+        lv_obj_set_style_text_color(tag, lv_color_hex(UI_ACCENT_GLOW), 0);
+        lv_obj_set_style_text_letter_space(tag, 1, 0);
+        lv_obj_align(tag, LV_ALIGN_RIGHT_MID, -56, 0);
+        lv_obj_add_flag(tag, LV_OBJ_FLAG_HIDDEN);
+    }
+    return row;
+}
+
 static void source_vl_update(void)
 {
     if (source_vl.list == NULL || lv_obj_has_flag(source_vl.list, LV_OBJ_FLAG_HIDDEN)) return;
@@ -528,16 +561,21 @@ static void source_vl_update(void)
         if ((i < first || i >= last) && source_item_buttons[i] != NULL) {
             lv_obj_del(source_item_buttons[i]);
             source_item_buttons[i] = NULL;
+            queue_row_more[i] = NULL;          /* they were the row's children */
+            queue_row_strip[i] = NULL;
         }
     }
     /* ... and build the ones that came in. */
     for (int i = first; i < last; i++) {
         if (source_item_buttons[i] != NULL) continue;
+        const bool song = source_song_rows();
         lv_obj_t *o = source_vl.grid ? source_build_tile(i, source_vl.list)
-                                     : source_build_row(i, source_vl.list, source_vl.detail, source_vl.album_detail);
+                    : song ? source_build_song_row(i, source_vl.list)
+                    : source_build_row(i, source_vl.list, source_vl.detail, source_vl.album_detail);
         source_item_buttons[i] = o;
         const int col = i % source_vl.cols, row = i / source_vl.cols;
         lv_obj_set_pos(o, source_vl.x0 + col * source_vl.dx, source_vl.y0 + row * source_vl.row_h);
+        if (song) queue_row_apply_one(i);
     }
     source_vl.first = first;
     source_vl.last = last;
@@ -587,6 +625,50 @@ static void source_vl_start(lv_obj_t *list, int view_h, int cols, int x0, int dx
     source_vl_update();
 }
 
+/* The queue / a playlist's songs as one scrolling list.  A redraw of the
+ * list on screen (after a move, say) keeps its place and keeps the moved
+ * song in view; a fresh queue opens at the playing song. */
+static void source_render_song_list(void)
+{
+    if (source_menu_list == NULL) return;
+    lv_obj_clear_flag(source_menu_list, LV_OBJ_FLAG_HIDDEN);
+
+    int y = source_list_keep_y;
+    source_list_keep_y = -1;
+    if (y < 0) {
+        int k = -1;
+        if (source_current_mode == SOURCE_QUEUE) {
+            for (int j = 0; j < source_item_count; j++) {
+                if (source_items[j].id == source_queue_current) { k = j; break; }
+            }
+        }
+        y = (k > 1) ? (k - 1) * SOURCE_QUEUE_ROW_H : 0;       /* one song above it */
+    }
+    const int max_y = 4 + source_item_count * SOURCE_QUEUE_ROW_H + 12 - SOURCE_MENU_LIST_H;
+    if (y > max_y) y = max_y;
+    if (y < 0) y = 0;
+    source_vl_start(source_menu_list, SOURCE_MENU_LIST_H, 1, SOURCE_GRID_X0, 0, 4, SOURCE_QUEUE_ROW_H,
+                    false, false, false, y);
+
+    if (source_queue_sel >= 0) {
+        for (int k = 0; k < source_item_count; k++) {
+            if (source_items[k].id != source_queue_sel) continue;
+            const int top = 4 + k * SOURCE_QUEUE_ROW_H;
+            const int sy = lv_obj_get_scroll_y(source_menu_list);
+            int to = -1;
+            if (top < sy) to = top - 4;
+            else if (top + SOURCE_QUEUE_ROW_H > sy + SOURCE_MENU_LIST_H - 12) {
+                to = top + SOURCE_QUEUE_ROW_H + 16 - SOURCE_MENU_LIST_H;
+            }
+            if (to >= 0) {
+                lv_obj_scroll_to_y(source_menu_list, to, LV_ANIM_OFF);
+                source_vl_update();
+            }
+            break;
+        }
+    }
+}
+
 
 /* The Queue: one song per row, full width.  Tap a row to play that song;
  * "..." on a row opens its move controls (14_power_and_browser_rows.c). */
@@ -633,17 +715,7 @@ static void source_render_queue(void)
         return;
     }
 
-    for (int i = 0; i < source_item_count && i < SOURCE_QUEUE_PAGE; i++) {
-        char clean[SOURCE_TEXT_MAX];
-        source_strip_audio_extension(source_items[i].title, clean, sizeof(clean));
-        lv_obj_t *row = create_source_item_button(source_overlay, clean, 870, SOURCE_QUEUE_ROW_H - 4,
-                                                  false, true);
-        lv_obj_set_pos(row, SOURCE_GRID_X0, 84 + i * SOURCE_QUEUE_ROW_H);
-        lv_obj_add_event_cb(row, source_item_event_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
-        source_item_buttons[i] = row;
-        queue_row_add_controls(row, i);
-    }
-    queue_rows_apply_selection();
+    source_render_song_list();
 }
 
 /* One list row (two-column menus, or a song in an album / folder). */
@@ -799,6 +871,16 @@ static void source_render_items(void)
     static char last_title[64] = "";
     const char *title_now = source_title_label != NULL ? lv_label_get_text(source_title_label) : "";
     int keep_scroll = 0;
+    /* The queue / a playlist redrawn while it is on screen keeps its place. */
+    if ((source_current_mode == SOURCE_QUEUE || source_current_mode == SOURCE_PLAYLIST_TRACKS) &&
+        source_menu_list != NULL && source_overlay != NULL &&
+        !lv_obj_has_flag(source_overlay, LV_OBJ_FLAG_HIDDEN) &&
+        !lv_obj_has_flag(source_menu_list, LV_OBJ_FLAG_HIDDEN) &&
+        source_view_key() == last_view_key) {
+        source_list_keep_y = lv_obj_get_scroll_y(source_menu_list);
+    } else {
+        source_list_keep_y = -1;
+    }
     if (source_menu_list != NULL && source_view_key() == last_view_key &&
         source_page_offset == last_offset && strncmp(title_now, last_title, sizeof(last_title) - 1) == 0) {
         keep_scroll = lv_obj_get_scroll_y(source_menu_list);
@@ -1793,50 +1875,56 @@ static void source_query_and_render(source_request_t request)
     }
 
     if (request.mode == SOURCE_QUEUE) {
-        /* The queue is the player's current playlist, read a page at a time
-         * from "status" with the artist tag. */
+        /* The queue is the player's current playlist, read from "status"
+         * with the artist tag: all of it (up to SOURCE_ITEM_CAP songs), a
+         * couple of hundred at a time.  The view scrolls; only the rows on
+         * screen are drawn. */
+        int total = 0, current = -1;
+        bool first_is_live = false;        /* a stream with no length: live radio */
+        char station[SOURCE_TEXT_MAX] = "";
+        source_item_count = 0;
+        for (int off = 0; off < SOURCE_ITEM_CAP; off += SOURCE_MAX_ITEMS) {
         snprintf(json, sizeof(json),
                  "{\"id\":1,\"method\":\"slim.request\",\"params\":[\"%s\",[\"status\",%d,%d,\"tags:audN\"]]}",
-                 lyrion_players[player_index].id, request.offset, SOURCE_QUEUE_PAGE);
+                 lyrion_players[player_index].id, off, SOURCE_MAX_ITEMS);
         if (!source_http_query(player_index, json, response, SOURCE_BROWSE_BUF)) {
+            if (off > 0) break;                /* show what arrived */
             heap_caps_free(response);
             source_show_error(&request, SOURCE_QUEUE, "Could not reach the Lyrion server");
             return;
         }
         cJSON *qroot = cJSON_Parse(response);
-        heap_caps_free(response);
         cJSON *qres = qroot ? cJSON_GetObjectItem(qroot, "result") : NULL;
         if (!cJSON_IsObject(qres)) {
             if (qroot) cJSON_Delete(qroot);
+            if (off > 0) break;
+            heap_caps_free(response);
             source_show_error(&request, SOURCE_QUEUE, "Unexpected reply from Lyrion");
             return;
         }
 
-        int total = 0, current = -1;
         cJSON *tot = cJSON_GetObjectItem(qres, "playlist_tracks");
         if (cJSON_IsNumber(tot)) total = tot->valueint;
         cJSON *cur = cJSON_GetObjectItem(qres, "playlist_cur_index");
         if (cJSON_IsNumber(cur)) current = cur->valueint;
         else if (cJSON_IsString(cur) && cur->valuestring) current = atoi(cur->valuestring);
 
-        source_item_count = 0;
-        bool first_is_live = false;        /* a stream with no length: live radio */
-        char station[SOURCE_TEXT_MAX] = "";
+        const int before = source_item_count;
         cJSON *loop = cJSON_GetObjectItem(qres, "playlist_loop");
         cJSON *entry = NULL;
         cJSON_ArrayForEach(entry, loop) {
+            if (source_item_count >= SOURCE_ITEM_CAP) break;
             cJSON *ix = cJSON_GetObjectItem(entry, "playlist index");
             cJSON *ti = cJSON_GetObjectItem(entry, "title");
             cJSON *ar = cJSON_GetObjectItem(entry, "artist");
             const int index = cJSON_IsNumber(ix) ? ix->valueint
                             : (cJSON_IsString(ix) && ix->valuestring ? atoi(ix->valuestring)
-                               : request.offset + source_item_count);
+                               : source_item_count);
             const char *title = (cJSON_IsString(ti) && ti->valuestring) ? ti->valuestring : "Unknown";
             const char *artist = (cJSON_IsString(ar) && ar->valuestring && ar->valuestring[0])
                                ? ar->valuestring : NULL;
             char text[SOURCE_TEXT_MAX];
-            snprintf(text, sizeof(text), "%s%d. %s%s%s",
-                     index == current ? LV_SYMBOL_PLAY " " : "", index + 1,
+            snprintf(text, sizeof(text), "%d. %s%s%s", index + 1,
                      artist ? artist : "", artist ? " - " : "", title);
             source_add_item(index, SOURCE_QUEUE_JUMP, text);
             if (source_item_count > 0) {
@@ -1866,7 +1954,11 @@ static void source_query_and_render(source_request_t request)
             }
         }
         cJSON_Delete(qroot);
-        source_has_next = (request.offset + SOURCE_QUEUE_PAGE < total);
+        if (source_item_count == before || source_item_count >= total) break;   /* all of it */
+        }
+        heap_caps_free(response);
+        request.offset = 0;
+        source_has_next = false;              /* the whole queue (up to the cap) is here */
         source_queue_total = total;
         source_queue_current = current;
         source_queue_radio = (total == 1 && source_item_count == 1 && first_is_live);

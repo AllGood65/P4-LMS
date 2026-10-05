@@ -406,13 +406,9 @@ static void source_remove_event_cb(lv_event_t *e)
     source_request_t request = {
         .mode = SOURCE_QUEUE_REMOVE,
         .id = source_items[index].id,
-        .offset = source_page_offset,
+        .offset = 0,
         .push_history = false
     };
-    /* Removing the only song on the last page: show the page before it. */
-    if (source_item_count == 1 && source_page_offset >= SOURCE_QUEUE_PAGE) {
-        request.offset = source_page_offset - SOURCE_QUEUE_PAGE;
-    }
     xQueueSend(source_queue, &request, 0);
     ui_toast("Removed from the queue");
 }
@@ -425,13 +421,32 @@ static void source_remove_event_cb(lv_event_t *e)
 #define QUEUE_MOVE_DOWN 1
 #define QUEUE_MOVE_NEXT 2
 
-/* Show the controls on the selected row and "..." on the others. */
-static void queue_rows_apply_selection(void)
+/* A queue row's children: 0 the title, 1 the note icon, then "...", the
+ * control strip and the "NOW PLAYING" tag. */
+#define QUEUE_ROW_ICON 1
+#define QUEUE_ROW_TAG  4
+
+/* Show the controls on the selected row and "..." on the others (row i,
+ * if it is on screen). */
+static void queue_row_apply_one(int i)
 {
-    for (int i = 0; i < source_item_count && i < SOURCE_QUEUE_PAGE; i++) {
+    {
         lv_obj_t *row = source_item_buttons[i];
-        if (row == NULL || queue_row_more[i] == NULL || queue_row_strip[i] == NULL) continue;
+        if (row == NULL || queue_row_more[i] == NULL || queue_row_strip[i] == NULL) return;
         const bool sel = (source_items[i].id == source_queue_sel);
+        /* The song playing now: a play icon, bright text and "NOW PLAYING". */
+        const bool playing = (source_current_mode == SOURCE_QUEUE &&
+                              source_items[i].id == source_queue_current);
+        lv_obj_t *icon = lv_obj_get_child(row, QUEUE_ROW_ICON);
+        if (icon != NULL && lv_obj_check_type(icon, &lv_label_class)) {
+            lv_label_set_text(icon, playing ? LV_SYMBOL_PLAY : LV_SYMBOL_AUDIO);
+            lv_obj_set_style_text_color(icon, lv_color_hex(playing ? UI_ACCENT_GLOW : UI_AMBER), 0);
+        }
+        lv_obj_t *tag = (source_current_mode == SOURCE_QUEUE) ? lv_obj_get_child(row, QUEUE_ROW_TAG) : NULL;
+        if (tag != NULL && lv_obj_check_type(tag, &lv_label_class)) {
+            if (playing && !sel) lv_obj_clear_flag(tag, LV_OBJ_FLAG_HIDDEN);
+            else                 lv_obj_add_flag(tag, LV_OBJ_FLAG_HIDDEN);
+        }
         if (sel) {
             lv_obj_add_flag(queue_row_more[i], LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(queue_row_strip[i], LV_OBJ_FLAG_HIDDEN);
@@ -440,14 +455,35 @@ static void queue_rows_apply_selection(void)
             lv_obj_add_flag(queue_row_strip[i], LV_OBJ_FLAG_HIDDEN);
         }
         lv_obj_set_style_bg_color(row, lv_color_hex(sel ? UI_ACCENT_DARK : UI_BUTTON), LV_PART_MAIN);
-        lv_obj_set_style_border_color(row, lv_color_hex(sel ? UI_ACCENT : UI_ACCENT_DARK), LV_PART_MAIN);
-        lv_obj_set_style_border_width(row, sel ? 2 : 1, LV_PART_MAIN);
+        lv_obj_set_style_border_color(row, lv_color_hex(sel ? UI_ACCENT : playing ? UI_ACCENT_GLOW : UI_ACCENT_DARK),
+                                      LV_PART_MAIN);
+        lv_obj_set_style_border_width(row, (sel || playing) ? 2 : 1, LV_PART_MAIN);
         lv_obj_t *label = lv_obj_get_child(row, 0);
         if (label != NULL) {
-            /* row 870 wide, icon margin 48; leave room for "..." or the strip */
+            /* row 870 wide, icon margin 48; leave room for "...", the strip
+             * or "NOW PLAYING" */
             const int strip_w = (source_current_mode == SOURCE_PLAYLIST_TRACKS) ? 200 : 316;
-            lv_obj_set_width(label, 870 - 48 - 16 - (sel ? strip_w : 50));
+            lv_obj_set_width(label, 870 - 48 - 16 - (sel ? strip_w : playing ? 170 : 50));
+            lv_obj_set_style_text_color(label, lv_color_hex(playing ? UI_ACCENT_GLOW : UI_TEXT), 0);
         }
+    }
+}
+
+static void queue_rows_apply_selection(void)
+{
+    for (int i = 0; i < source_item_count; i++) {
+        if (source_item_buttons[i] != NULL) queue_row_apply_one(i);
+    }
+}
+
+/* The Queue is open and another song started: move the NOW PLAYING mark. */
+static void queue_mark_playing_job(void *arg)
+{
+    const int idx = *(const int *)arg;
+    if (source_current_mode != SOURCE_QUEUE || idx == source_queue_current) return;
+    source_queue_current = idx;
+    if (source_overlay != NULL && !lv_obj_has_flag(source_overlay, LV_OBJ_FLAG_HIDDEN)) {
+        queue_rows_apply_selection();
     }
 }
 
@@ -499,7 +535,7 @@ static void queue_move_event_cb(lv_event_t *e)
         .mode = SOURCE_QUEUE_MOVE,
         .id = from,
         .queue_op = to,
-        .offset = (to / SOURCE_QUEUE_PAGE) * SOURCE_QUEUE_PAGE,   /* follow the song */
+        .offset = 0,
         .push_history = false
     };
     if (xQueueSend(source_queue, &request, 0) != pdTRUE) {
@@ -1041,7 +1077,7 @@ static void source_item_event_cb(lv_event_t *e)
     if ((source_current_mode == SOURCE_QUEUE || source_current_mode == SOURCE_PLAYLIST_TRACKS) &&
         source_queue_sel >= 0) {
         bool open_here = false;
-        for (int k = 0; k < source_item_count && k < SOURCE_QUEUE_PAGE; k++) {
+        for (int k = 0; k < source_item_count; k++) {
             if (source_items[k].id == source_queue_sel) { open_here = true; break; }
         }
         if (open_here) {

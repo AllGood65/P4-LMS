@@ -229,8 +229,13 @@ static int  source_queue_sel     = -1;    /* index whose move controls are open 
 static bool source_queue_radio = false;   /* the queue is just one live radio station */
 static bool source_queue_keep_sel = false;/* a move: keep that song selected       */
 static volatile bool source_queue_busy = false;  /* a move is on its way           */
-static lv_obj_t *queue_row_more[SOURCE_QUEUE_PAGE];
-static lv_obj_t *queue_row_strip[SOURCE_QUEUE_PAGE];
+/* Queue / playlist rows: each row's "..." button and its control strip
+ * (SOURCE_ITEM_CAP each, in PSRAM; only rows on screen have them). */
+static lv_obj_t **queue_row_more = NULL;
+static lv_obj_t **queue_row_strip = NULL;
+/* Redrawing the queue / a playlist that is on screen keeps its scroll
+ * position (-1: a fresh view, which shows the playing song). */
+static int source_list_keep_y = -1;
 static int source_parent_id = 0;
 static char source_parent_item_id[96] = "";
 static char source_current_title[SOURCE_TEXT_MAX] = "SOURCE";
@@ -479,8 +484,13 @@ static bool source_init_items(void)
                                                          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     source_grid_want = (volatile uint8_t *)heap_caps_calloc(SOURCE_ITEM_CAP, 1,
                                                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    queue_row_more = (lv_obj_t **)heap_caps_calloc(SOURCE_ITEM_CAP, sizeof(lv_obj_t *),
+                                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    queue_row_strip = (lv_obj_t **)heap_caps_calloc(SOURCE_ITEM_CAP, sizeof(lv_obj_t *),
+                                                     MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 
-    if (source_items == NULL || source_item_buttons == NULL || source_grid_want == NULL) {
+    if (source_items == NULL || source_item_buttons == NULL || source_grid_want == NULL ||
+        queue_row_more == NULL || queue_row_strip == NULL) {
         ESP_LOGE(TAG,
                  "Could not allocate source item buffer in PSRAM (%u bytes)",
                  (unsigned)(SOURCE_ITEM_CAP * sizeof(source_item_t)));
@@ -566,9 +576,9 @@ static void source_clear_items(void)
     /* (Deleting a tile frees its cover - see source_tile_delete_cb.) */
     if (source_grid_want != NULL) memset((void *)source_grid_want, 0, SOURCE_ITEM_CAP);
     source_grid_gen++;
-    for (int i = 0; i < SOURCE_QUEUE_PAGE; i++) {       /* children of the rows just deleted */
-        queue_row_more[i] = NULL;
-        queue_row_strip[i] = NULL;
+    if (queue_row_more != NULL && queue_row_strip != NULL) {   /* children of the rows just deleted */
+        memset(queue_row_more, 0, SOURCE_ITEM_CAP * sizeof(lv_obj_t *));
+        memset(queue_row_strip, 0, SOURCE_ITEM_CAP * sizeof(lv_obj_t *));
     }
     source_queue_busy = false;                          /* the view is being redrawn */
     source_item_count = 0;
@@ -614,7 +624,10 @@ static void source_update_page_controls(void)
     const bool grows_more = source_has_next && source_list_grows() &&
                             source_item_count < SOURCE_ITEM_CAP;
     const bool one_page = (source_page_offset <= 0 && (!source_has_next || grows_more));
-    const bool hide_paging = is_track_view || one_page;
+    /* The queue and a playlist's songs are fetched whole and scroll. */
+    const bool hide_paging = is_track_view || one_page ||
+                             source_current_mode == SOURCE_QUEUE ||
+                             source_current_mode == SOURCE_PLAYLIST_TRACKS;
     if (source_prev_button != NULL) {
         if (hide_paging) lv_obj_add_flag(source_prev_button, LV_OBJ_FLAG_HIDDEN);
         else {

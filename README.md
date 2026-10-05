@@ -10,12 +10,12 @@ A 7" touchscreen controller for whole-house music, built on a Waveshare ESP32-P4
 - **Rooms:** every player on one screen, with what's playing, its volume, one-tap room switching and grouping rooms to play in sync
 - **System power:** one switch per room turns the amp (and an optional pre-amp) on and off through Home Assistant, in a configurable order with a delay, so there's no speaker thump. A power button on Now Playing does the same for the current room
 - **Music browsing:** artists, albums with cover art, genres, folders, search, favourites, and picking several songs at once. Lists scroll and keep loading as you go, even in large libraries
-- **Queue editing:** move songs, play next, remove, favourite, add to a playlist
+- **Queue editing:** the whole queue scrolls with the playing song marked; move songs, play next, remove, favourite, add to a playlist
 - **Saved playlists:** create, add to, reorder, rename, and play from any song
 - **Internet radio and apps,** including YouTube search (with Lyrion's YouTube plugin)
 - **Visualizers:** several styles driven by the built-in microphone, with adjustable sensitivity
 - **Colour themes**
-- **Screensavers:** album art, cover wall, big text, VU meters, clocks, and weather with a 3-day forecast (Open-Meteo, no account needed)
+- **Screensavers:** album art, cover wall, big text, VU meters, clocks, and weather with a 3-day forecast (Open-Meteo, no account needed); the clock has 5 fonts, 4 sizes, 12/24-hour time, date styles and colours
 - **Sleep timer and alarms** that power the amps down and up in order
 - **Web settings page:** Home Assistant setup, power switches, weather location, time zone, settings backup/restore, and firmware updates over Wi-Fi
 - **Location profiles:** remembers a separate Lyrion server and players for each Wi-Fi network

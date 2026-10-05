@@ -161,7 +161,7 @@ static void pl_move_event_cb(lv_event_t *e)
     if (to < 0 || to >= source_queue_total) return;
     source_queue_busy = true;
     source_request_t r = { .mode = SOURCE_PL_EDIT, .id = source_parent_id, .queue_op = PL_EDIT_MOVE,
-                           .offset = (to / SOURCE_QUEUE_PAGE) * SOURCE_QUEUE_PAGE, .push_history = false };
+                           .offset = 0, .push_history = false };
     snprintf(r.item_id, sizeof(r.item_id), "%d,%d", from, to);
     snprintf(r.title, sizeof(r.title), "%s", source_folder_title);
     if (xQueueSend(source_queue, &r, 0) != pdTRUE) source_queue_busy = false;
@@ -174,10 +174,7 @@ static void pl_remove_event_cb(lv_event_t *e)
     if (i < 0 || i >= source_item_count || source_queue == NULL || source_queue_busy) return;
     source_queue_busy = true;
     source_request_t r = { .mode = SOURCE_PL_EDIT, .id = source_parent_id, .queue_op = PL_EDIT_DELETE,
-                           .offset = source_page_offset, .push_history = false };
-    if (source_item_count == 1 && source_page_offset >= SOURCE_QUEUE_PAGE) {
-        r.offset = source_page_offset - SOURCE_QUEUE_PAGE;       /* last one on the last page */
-    }
+                           .offset = 0, .push_history = false };
     snprintf(r.item_id, sizeof(r.item_id), "%d", source_items[i].id);
     snprintf(r.title, sizeof(r.title), "%s", source_folder_title);
     if (xQueueSend(source_queue, &r, 0) != pdTRUE) { source_queue_busy = false; return; }
@@ -207,46 +204,41 @@ static void pl_queue_event_cb(lv_event_t *e)
     ui_toast(msg);
 }
 
+/* "..." and the (hidden) control strip on playlist song row i:  ^  v  +  x */
+static void pl_row_add_controls(lv_obj_t *row, int i)
+{
+    const int idx = source_items[i].id;
+    lv_obj_t *more = queue_ctrl_button(row, LV_SYMBOL_BARS, 0, 40, UI_BUTTON, queue_more_event_cb, i);
+    lv_obj_align(more, LV_ALIGN_RIGHT_MID, -5, 0);
+    lv_obj_set_style_border_width(more, 1, 0);
+    lv_obj_set_style_border_color(more, lv_color_hex(UI_EDGE), 0);
+    lv_obj_set_style_text_color(lv_obj_get_child(more, 0), lv_color_hex(UI_TEXT_SOFT), 0);
+    queue_row_more[i] = more;
+
+    lv_obj_t *strip = lv_obj_create(row);
+    lv_obj_remove_style_all(strip);
+    lv_obj_set_size(strip, 192, 40);
+    lv_obj_align(strip, LV_ALIGN_RIGHT_MID, -4, 0);
+    lv_obj_clear_flag(strip, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(strip, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(strip, LV_OBJ_FLAG_HIDDEN);
+    queue_row_strip[i] = strip;
+
+    lv_obj_t *up   = queue_ctrl_button(strip, LV_SYMBOL_UP,   0,   42, UI_ACCENT, pl_move_event_cb, (i << 2) | PL_MOVE_UP);
+    lv_obj_t *down = queue_ctrl_button(strip, LV_SYMBOL_DOWN, 50,  42, UI_ACCENT, pl_move_event_cb, (i << 2) | PL_MOVE_DOWN);
+    lv_obj_t *add  = queue_ctrl_button(strip, LV_SYMBOL_PLUS, 100, 42, UI_ACCENT, pl_queue_event_cb, i);
+    queue_ctrl_button(strip, LV_SYMBOL_CLOSE, 150, 42, UI_RED, pl_remove_event_cb, i);
+    if (idx <= 0) lv_obj_add_state(up, LV_STATE_DISABLED);
+    if (idx >= source_queue_total - 1) lv_obj_add_state(down, LV_STATE_DISABLED);
+    if (source_items[i].artwork_track_id <= 0 && !source_items[i].radio_play_json[0]) {
+        lv_obj_add_state(add, LV_STATE_DISABLED);
+    }
+}
+
 /* Rows like the queue's: tap to play from here, "..." for the controls. */
 static void source_render_playlist(void)
 {
-    for (int i = 0; i < source_item_count && i < SOURCE_QUEUE_PAGE; i++) {
-        char clean[SOURCE_TEXT_MAX];
-        source_strip_audio_extension(source_items[i].title, clean, sizeof(clean));
-        lv_obj_t *row = create_source_item_button(source_overlay, clean, 870, SOURCE_QUEUE_ROW_H - 4,
-                                                  false, true);
-        lv_obj_set_pos(row, SOURCE_GRID_X0, 84 + i * SOURCE_QUEUE_ROW_H);
-        lv_obj_add_event_cb(row, source_item_event_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
-        source_item_buttons[i] = row;
-
-        const int idx = source_items[i].id;
-        lv_obj_t *more = queue_ctrl_button(row, LV_SYMBOL_BARS, 0, 40, UI_BUTTON, queue_more_event_cb, i);
-        lv_obj_align(more, LV_ALIGN_RIGHT_MID, -5, 0);
-        lv_obj_set_style_border_width(more, 1, 0);
-        lv_obj_set_style_border_color(more, lv_color_hex(UI_EDGE), 0);
-        lv_obj_set_style_text_color(lv_obj_get_child(more, 0), lv_color_hex(UI_TEXT_SOFT), 0);
-        queue_row_more[i] = more;
-
-        lv_obj_t *strip = lv_obj_create(row);
-        lv_obj_remove_style_all(strip);
-        lv_obj_set_size(strip, 192, 40);
-        lv_obj_align(strip, LV_ALIGN_RIGHT_MID, -4, 0);
-        lv_obj_clear_flag(strip, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_flag(strip, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_add_flag(strip, LV_OBJ_FLAG_HIDDEN);
-        queue_row_strip[i] = strip;
-
-        lv_obj_t *up   = queue_ctrl_button(strip, LV_SYMBOL_UP,   0,   42, UI_ACCENT, pl_move_event_cb, (i << 2) | PL_MOVE_UP);
-        lv_obj_t *down = queue_ctrl_button(strip, LV_SYMBOL_DOWN, 50,  42, UI_ACCENT, pl_move_event_cb, (i << 2) | PL_MOVE_DOWN);
-        lv_obj_t *add  = queue_ctrl_button(strip, LV_SYMBOL_PLUS, 100, 42, UI_ACCENT, pl_queue_event_cb, i);
-        queue_ctrl_button(strip, LV_SYMBOL_CLOSE, 150, 42, UI_RED, pl_remove_event_cb, i);
-        if (idx <= 0) lv_obj_add_state(up, LV_STATE_DISABLED);
-        if (idx >= source_queue_total - 1) lv_obj_add_state(down, LV_STATE_DISABLED);
-        if (source_items[i].artwork_track_id <= 0 && !source_items[i].radio_play_json[0]) {
-            lv_obj_add_state(add, LV_STATE_DISABLED);
-        }
-    }
-    queue_rows_apply_selection();
+    source_render_song_list();
 }
 
 /* ============================================================ browser task */
@@ -357,44 +349,55 @@ static void pl_rename_done_job(void *arg)
 
 static void pl_show_tracks(source_request_t request, char *buf, size_t n)
 {
+    /* All of the playlist (up to SOURCE_ITEM_CAP songs), a couple of hundred
+     * at a time; the view scrolls. */
     char p[128];
-    snprintf(p, sizeof(p), "\"playlists\",\"tracks\",%d,%d,\"playlist_id:%d\",\"tags:au\"",
-             request.offset, SOURCE_QUEUE_PAGE, request.id);
-    if (!pl_cmd(p, buf, n)) {
-        source_show_error(&request, SOURCE_PLAYLIST_TRACKS, "Could not reach the Lyrion server");
-        return;
-    }
-    cJSON *root = cJSON_Parse(buf);
-    cJSON *res = root ? cJSON_GetObjectItem(root, "result") : NULL;
-    if (!cJSON_IsObject(res)) {
-        if (root) cJSON_Delete(root);
-        source_show_error(&request, SOURCE_PLAYLIST_TRACKS, "Unexpected reply from Lyrion");
-        return;
-    }
-    const int total = pl_json_int(cJSON_GetObjectItem(res, "count"));
+    int total = 0;
     source_item_count = 0;
-    cJSON *loop = cJSON_GetObjectItem(res, "playlisttracks_loop");
-    cJSON *entry = NULL;
-    cJSON_ArrayForEach(entry, loop) {
-        cJSON *ix = cJSON_GetObjectItem(entry, "playlist index");
-        const int index = ix ? pl_json_int(ix) : request.offset + source_item_count;
-        cJSON *ti = cJSON_GetObjectItem(entry, "title");
-        cJSON *ar = cJSON_GetObjectItem(entry, "artist");
-        const char *title = (cJSON_IsString(ti) && ti->valuestring) ? ti->valuestring : "Unknown";
-        const char *artist = (cJSON_IsString(ar) && ar->valuestring && ar->valuestring[0]) ? ar->valuestring : NULL;
-        char text[SOURCE_TEXT_MAX];
-        snprintf(text, sizeof(text), "%d. %s%s%s", index + 1, artist ? artist : "", artist ? " - " : "", title);
-        source_add_item(index, SOURCE_PL_PLAY_FROM, text);
-        if (source_item_count > 0) {
-            source_item_t *it = &source_items[source_item_count - 1];
-            it->artwork_track_id = pl_json_int(cJSON_GetObjectItem(entry, "id"));
-            cJSON *u = cJSON_GetObjectItem(entry, "url");
-            snprintf(it->radio_play_json, sizeof(it->radio_play_json), "%s",
-                     (cJSON_IsString(u) && u->valuestring) ? u->valuestring : "");
+    for (int off = 0; off < SOURCE_ITEM_CAP; off += SOURCE_MAX_ITEMS) {
+        snprintf(p, sizeof(p), "\"playlists\",\"tracks\",%d,%d,\"playlist_id:%d\",\"tags:au\"",
+                 off, SOURCE_MAX_ITEMS, request.id);
+        if (!pl_cmd(p, buf, n)) {
+            if (off > 0) break;
+            source_show_error(&request, SOURCE_PLAYLIST_TRACKS, "Could not reach the Lyrion server");
+            return;
         }
+        cJSON *root = cJSON_Parse(buf);
+        cJSON *res = root ? cJSON_GetObjectItem(root, "result") : NULL;
+        if (!cJSON_IsObject(res)) {
+            if (root) cJSON_Delete(root);
+            if (off > 0) break;
+            source_show_error(&request, SOURCE_PLAYLIST_TRACKS, "Unexpected reply from Lyrion");
+            return;
+        }
+        total = pl_json_int(cJSON_GetObjectItem(res, "count"));
+        const int before = source_item_count;
+        cJSON *loop = cJSON_GetObjectItem(res, "playlisttracks_loop");
+        cJSON *entry = NULL;
+        cJSON_ArrayForEach(entry, loop) {
+            if (source_item_count >= SOURCE_ITEM_CAP) break;
+            cJSON *ix = cJSON_GetObjectItem(entry, "playlist index");
+            const int index = ix ? pl_json_int(ix) : source_item_count;
+            cJSON *ti = cJSON_GetObjectItem(entry, "title");
+            cJSON *ar = cJSON_GetObjectItem(entry, "artist");
+            const char *title = (cJSON_IsString(ti) && ti->valuestring) ? ti->valuestring : "Unknown";
+            const char *artist = (cJSON_IsString(ar) && ar->valuestring && ar->valuestring[0]) ? ar->valuestring : NULL;
+            char text[SOURCE_TEXT_MAX];
+            snprintf(text, sizeof(text), "%d. %s%s%s", index + 1, artist ? artist : "", artist ? " - " : "", title);
+            source_add_item(index, SOURCE_PL_PLAY_FROM, text);
+            if (source_item_count > 0) {
+                source_item_t *it = &source_items[source_item_count - 1];
+                it->artwork_track_id = pl_json_int(cJSON_GetObjectItem(entry, "id"));
+                cJSON *u = cJSON_GetObjectItem(entry, "url");
+                snprintf(it->radio_play_json, sizeof(it->radio_play_json), "%s",
+                         (cJSON_IsString(u) && u->valuestring) ? u->valuestring : "");
+            }
+        }
+        cJSON_Delete(root);
+        if (source_item_count == before || source_item_count >= total) break;
     }
-    cJSON_Delete(root);
-    source_has_next = (request.offset + SOURCE_QUEUE_PAGE < total);
+    request.offset = 0;
+    source_has_next = false;
     source_queue_total = total;
     source_queue_current = -1;
     if (!source_queue_keep_sel) source_queue_sel = -1;

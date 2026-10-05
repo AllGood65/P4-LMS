@@ -25,7 +25,22 @@ static volatile int      bl_art_pct     = 60;    /* album art view brightness   
 #define BACKLIGHT_STANDBY_PCT        bl_standby_pct
 #define BACKLIGHT_DEEP_PCT           bl_deep_pct
 
+/* Clock screensaver look (Settings > Screensaver > CLOCK STYLE). */
+static int ss_clk_font = 0;     /* 0 Classic, 1 Condensed, 2 Digital, 3 Elegant, 4 Future */
+static int ss_clk_size = 1;     /* 0 Small, 1 Medium, 2 Large, 3 Huge                    */
+static int ss_clk_fmt  = 0;     /* 0 12-hour + AM/PM, 1 12-hour, 2 24-hour               */
+static int ss_clk_date = 2;     /* 0 off, 1 Sunday, October 4, 2 Sun  Oct 04  2026,
+                                   3 Sunday 4 October, 4 2026-10-04                      */
+static int ss_clk_col  = 0;     /* 0 theme colour, 1 white, 2 dim                        */
+#define SS_CLK_FONTS 5
+#define SS_CLK_SIZES 4
+#define SS_CLK_FMTS  3
+#define SS_CLK_DATES 5
+#define SS_CLK_COLS  3
+
 static lv_obj_t *screensaver_overlay = NULL;
+static lv_obj_t *screensaver_clock_row = NULL;     /* the time + AM/PM, centred together */
+static lv_obj_t *screensaver_ampm_label = NULL;
 static lv_obj_t *screensaver_clock_label = NULL;
 static lv_obj_t *screensaver_date_label = NULL;
 static lv_timer_t *screensaver_timer = NULL;

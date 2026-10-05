@@ -13,7 +13,6 @@ static void lyrion_status_task(void *arg);
 
 static void lyrion_command_task(void *arg);
 static void np_power_room_changed(void);      /* Now Playing power button, 11_transport_controls.c */
-static void np_power_refresh_soon(void);
 static volatile bool wifi_have_ip = false;    /* set once the display has an address */
 static void source_browser_task(void *arg);
 static void lvgl_mem_log(const char *when);   /* defined later, near SETTINGS */
@@ -265,6 +264,39 @@ static bool time_is_valid(const struct tm *t)
     return t != NULL && t->tm_year >= (2024 - 1900);
 }
 
+/* The clock's look: fonts, colours and the order of the date. */
+static const lv_font_t *ss_clk_big_font(void)
+{
+    static const lv_font_t *const fonts[SS_CLK_FONTS] = {
+        &p4_clock_montserrat, &p4_clock_oswald, &p4_clock_dseg7, &p4_clock_dmserif, &p4_clock_orbitron };
+    return fonts[(ss_clk_font >= 0 && ss_clk_font < SS_CLK_FONTS) ? ss_clk_font : 0];
+}
+
+static uint32_t ss_clk_time_colour(void)
+{
+    return ss_clk_col == 1 ? 0xF4F1EC : ss_clk_col == 2 ? 0x7A7A7A : UI_ACCENT_GLOW;
+}
+
+static uint32_t ss_clk_date_colour(void)
+{
+    return ss_clk_col == 1 ? 0xBDBAB5 : ss_clk_col == 2 ? 0x575757 : UI_DATE;
+}
+
+/* The date in the chosen style ("" when the date is switched off). */
+static void ss_clk_date_text(const struct tm *t, char *out, size_t size)
+{
+    char day[16], month[16];
+    strftime(day, sizeof(day), "%A", t);
+    strftime(month, sizeof(month), "%B", t);
+    switch (ss_clk_date) {
+        case 0:  out[0] = '\0'; break;
+        case 1:  snprintf(out, size, "%s, %s %d", day, month, t->tm_mday); break;
+        case 3:  snprintf(out, size, "%s %d %s", day, t->tm_mday, month); break;
+        case 4:  strftime(out, size, "%Y-%m-%d", t); break;
+        default: strftime(out, size, "%a  %b %d  %Y", t); break;
+    }
+}
+
 static void screensaver_update_clock(void)
 {
     if (screensaver_clock_label == NULL ||
@@ -280,31 +312,82 @@ static void screensaver_update_clock(void)
     }
 
     if (!time_is_valid(&local_time)) {
-        ui_set_label(screensaver_clock_label, "--:-- --");
+        ui_set_label(screensaver_clock_label, "--:--");
+        ui_set_label(screensaver_ampm_label, "");
         ui_set_label(screensaver_date_label, "SYNCING TIME");
         if (ss_art_clock != NULL) ui_set_label(ss_art_clock, "");
         return;
     }
 
-    /* Clean 12-hour clock with AM/PM. */
-    char clock_text[32];
-    char date_text[32];
+    char clock_text[24];
+    char full_text[32];
+    char date_text[64];
+    const int hour = local_time.tm_hour;
+    const char *ampm = "";
 
-    strftime(clock_text, sizeof(clock_text), "%I:%M %p", &local_time);
-    strftime(date_text, sizeof(date_text), "%a  %b %d  %Y", &local_time);
-
-    /* Keep a fixed 8-character clock width so the clock never changes
-     * horizontal geometry when going from 9:xx to 10:xx.  A space replaces
-     * the leading zero for the receiver-style look. */
-    if (clock_text[0] == '0') {
-        clock_text[0] = ' ';
+    if (ss_clk_fmt == 2) {
+        snprintf(clock_text, sizeof(clock_text), "%02d:%02d", hour, local_time.tm_min);
+    } else {
+        const int h12 = (hour % 12) ? (hour % 12) : 12;
+        snprintf(clock_text, sizeof(clock_text), "%d:%02d", h12, local_time.tm_min);
+        if (ss_clk_fmt == 0) ampm = hour < 12 ? "AM" : "PM";
     }
+    snprintf(full_text, sizeof(full_text), "%s%s%s", clock_text, ampm[0] ? " " : "", ampm);
+    ss_clk_date_text(&local_time, date_text, sizeof(date_text));
 
     ui_set_label(screensaver_clock_label, clock_text);
+    ui_set_label(screensaver_ampm_label, ampm);
     ui_set_label(screensaver_date_label, date_text);
     if (ss_art_clock != NULL) {
-        ui_set_label(ss_art_clock, clock_text[0] == ' ' ? clock_text + 1 : clock_text);
+        ui_set_label(ss_art_clock, full_text);
     }
+}
+
+/* Font, size, colour and position of the big clock (and the date under it).
+ * The digits are drawn from one 180 px font and scaled down for the smaller
+ * sizes.  `cover`: the paused song is shown below, so the clock sits higher. */
+static void ss_clock_apply_style(bool cover)
+{
+    if (screensaver_clock_row == NULL) return;
+    static const int scale[SS_CLK_SIZES] = { 114, 149, 192, 256 };      /* 80, 105, 135, 180 px */
+    const lv_font_t *big = ss_clk_big_font();
+    const int sz = (ss_clk_size >= 0 && ss_clk_size < SS_CLK_SIZES) ? ss_clk_size : 1;
+
+    lv_obj_set_style_text_font(screensaver_clock_label, big, 0);
+    lv_obj_set_style_text_letter_space(screensaver_clock_label, ss_clk_font == 2 ? 8 : 3, 0);
+    lv_obj_set_style_text_color(screensaver_clock_label, lv_color_hex(ss_clk_time_colour()), 0);
+    lv_obj_set_style_text_color(screensaver_ampm_label, lv_color_hex(ss_clk_time_colour()), 0);
+    lv_obj_set_style_text_color(screensaver_date_label, lv_color_hex(ss_clk_date_colour()), 0);
+    /* AM / PM sits on the same baseline as the digits. */
+    lv_obj_set_style_translate_y(screensaver_ampm_label,
+                                 (int32_t)p4_font_48.base_line - (int32_t)big->base_line, 0);
+    if (ss_clk_fmt == 0) lv_obj_clear_flag(screensaver_ampm_label, LV_OBJ_FLAG_HIDDEN);
+    else                 lv_obj_add_flag(screensaver_ampm_label, LV_OBJ_FLAG_HIDDEN);
+    if (ss_clk_date != 0) lv_obj_clear_flag(screensaver_date_label, LV_OBJ_FLAG_HIDDEN);
+    else                  lv_obj_add_flag(screensaver_date_label, LV_OBJ_FLAG_HIDDEN);
+
+    /* Centre the digits + date as one block (above the paused song, if
+     * shown).  The digits' own height comes from the font's "0", since the
+     * fonts leave different amounts of room above them. */
+    const int sc = scale[sz];
+    const int h = big->line_height;
+    int vis_top = 0, vis_h = h;
+    lv_font_glyph_dsc_t g;
+    if (lv_font_get_glyph_dsc(big, &g, '0', 0) && g.box_h > 0) {
+        vis_h = g.box_h;
+        vis_top = h - big->base_line - g.ofs_y - g.box_h;
+    }
+    const int digits_h = vis_h * sc / 256;
+    const int date_h = ss_clk_date != 0 ? 22 + 48 : 0;
+    const int group = digits_h + date_h;
+    int top = cover ? (330 - group) / 2 + 8 : (600 - group) / 2 - 10;
+    if (top < 8) top = 8;
+    /* Scaling is about the row's centre; place the label so the scaled
+     * digits start at `top`.  (The row has 12 px padding above the label.) */
+    const int label_y = top - h / 2 - (vis_top - h / 2) * sc / 256;
+    lv_obj_set_style_transform_scale(screensaver_clock_row, sc, 0);
+    lv_obj_align(screensaver_clock_row, LV_ALIGN_TOP_MID, 0, label_y - 12);
+    lv_obj_set_pos(screensaver_date_label, 0, top + digits_h + 22);
 }
 
 
@@ -520,8 +603,7 @@ static void screensaver_set_view(int view)
         lv_obj_add_flag(ss_art_box, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(ss_clock_box, LV_OBJ_FLAG_HIDDEN);
         /* Clock sits higher when the paused song is shown below it. */
-        lv_obj_set_pos(screensaver_clock_label, 0, cover ? 150 : 234);
-        lv_obj_set_pos(screensaver_date_label, 0, cover ? 232 : 321);
+        ss_clock_apply_style(cover);
         if (cover) lv_obj_clear_flag(ss_pause_box, LV_OBJ_FLAG_HIDDEN);
         else       lv_obj_add_flag(ss_pause_box, LV_OBJ_FLAG_HIDDEN);
     }
@@ -583,6 +665,8 @@ static void screensaver_show(int view)
 static int  ss_preview_view = -1;
 static bool screensaver_back_to_settings = false;
 static void ssp_show(void);                    /* 18d_screensaver_panel.c */
+static void csp_show(void);
+static bool ss_preview_from_clock;
 
 static void screensaver_preview_show(void)
 {
@@ -617,7 +701,8 @@ static void screensaver_hide(void)
 
     if (screensaver_back_to_settings) {         /* after a PREVIEW */
         screensaver_back_to_settings = false;
-        ssp_show();
+        if (ss_preview_from_clock) { ss_preview_from_clock = false; csp_show(); }
+        else ssp_show();
     }
 }
 
@@ -753,15 +838,31 @@ static void create_screensaver(lv_obj_t *screen)
     /* ---- clock views ---- */
     ss_clock_box = ss_box(screensaver_overlay, 1024, 600);
 
-    /* Clock: native 48 px font, full-screen width, centred text.  Warm amber
-     * so the standby screen stays easy on the eyes at night. */
-    screensaver_clock_label = lv_label_create(ss_clock_box);
-    lv_label_set_text(screensaver_clock_label, "--:-- --");
-    lv_obj_set_style_text_font(screensaver_clock_label, &p4_font_48, 0);
+    /* Clock: the time in a big font (Settings > Screensaver > CLOCK STYLE)
+     * with AM / PM beside it, centred together; ss_clock_apply_style() sets
+     * the font, size, colour and position. */
+    screensaver_clock_row = lv_obj_create(ss_clock_box);
+    lv_obj_remove_style_all(screensaver_clock_row);
+    lv_obj_set_size(screensaver_clock_row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(screensaver_clock_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(screensaver_clock_row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_END);
+    lv_obj_set_style_pad_column(screensaver_clock_row, 18, 0);
+    lv_obj_set_style_pad_ver(screensaver_clock_row, 12, 0);      /* room for AM/PM's baseline nudge */
+    lv_obj_set_style_transform_pivot_x(screensaver_clock_row, lv_pct(50), 0);
+    lv_obj_set_style_transform_pivot_y(screensaver_clock_row, lv_pct(50), 0);
+    lv_obj_clear_flag(screensaver_clock_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(screensaver_clock_row, LV_OBJ_FLAG_CLICKABLE);
+
+    screensaver_clock_label = lv_label_create(screensaver_clock_row);
+    lv_label_set_text(screensaver_clock_label, "--:--");
+    lv_obj_set_style_text_font(screensaver_clock_label, &p4_clock_montserrat, 0);
     lv_obj_set_style_text_color(screensaver_clock_label, lv_color_hex(UI_ACCENT_GLOW), 0);
-    lv_obj_set_style_text_align(screensaver_clock_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_letter_space(screensaver_clock_label, 3, 0);
-    lv_obj_set_width(screensaver_clock_label, 1024);
+
+    screensaver_ampm_label = lv_label_create(screensaver_clock_row);
+    lv_label_set_text(screensaver_ampm_label, "");
+    lv_obj_set_style_text_font(screensaver_ampm_label, &p4_font_48, 0);
+    lv_obj_set_style_text_color(screensaver_ampm_label, lv_color_hex(UI_ACCENT_GLOW), 0);
+    lv_obj_set_style_text_letter_space(screensaver_ampm_label, 2, 0);
 
     /* Date: native 40 px font, dimmer than the clock. */
     screensaver_date_label = lv_label_create(ss_clock_box);

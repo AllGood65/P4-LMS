@@ -79,6 +79,7 @@ static char np_fav_title[128] = "";        /* name to save it under             
 static char np_fav_index[24] = "";         /* its favorites id, for removing it      */
 static void ui_add_settings_back(lv_obj_t *panel);   /* BACK to Settings (18b) */
 static lv_obj_t *ssp_overlay = NULL;
+static lv_obj_t *csp_overlay = NULL;       /* Settings > Screensaver > Clock style (18d) */
 static lv_obj_t *vsp_overlay = NULL;       /* Settings > Visualizer panel (18d)      */       /* Settings > Screensaver panel (18d)     */
 static lv_obj_t *fav_button = NULL;        /* "+ FAV" / "FAV" on Now Playing         */
 static lv_obj_t *np_list_button = NULL;    /* "+ LIST" beside it: add to a playlist  */

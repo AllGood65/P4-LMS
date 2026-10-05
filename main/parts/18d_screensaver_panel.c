@@ -168,6 +168,13 @@ static lv_obj_t *ssp_stepper(lv_obj_t *p, int y, int user_base)
     return l;
 }
 
+static void csp_show(void);
+
+static void ssp_clock_style_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) csp_show();
+}
+
 static void ssp_create(lv_obj_t *screen)
 {
     lv_obj_t *p = nav_panel_create(screen, "SCREENSAVER", ssp_close_event_cb);
@@ -202,6 +209,12 @@ static void ssp_create(lv_obj_t *screen)
     ssp_label(p, "minutes on the screensaver", &p4_font_14, UI_TEXT_DIM, 30, 352);
     ssp_deep_lbl = ssp_stepper(p, 320, 2);
 
+    /* The clock's look has its own page. */
+    lv_obj_t *cs = create_button(p, "CLOCK\nSTYLE", 150, 104);
+    lv_obj_set_pos(cs, 750, 262);
+    lv_obj_set_style_text_align(lv_obj_get_child(cs, 0), LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_add_event_cb(cs, ssp_clock_style_event_cb, LV_EVENT_CLICKED, NULL);
+
     ssp_label(p, "Brightness", &p4_font_18, UI_TEXT, 30, 390);
     static const char *const bl_names[3] = { "While playing", "Standby", "Deep dim" };
     for (int i = 0; i < 3; i++) {
@@ -220,6 +233,128 @@ static void ssp_create(lv_obj_t *screen)
         ssp_slider[i] = s;
         ssp_slider_lbl[i] = ssp_label(p, "", &p4_font_16, UI_TEXT, 836, y - 2);
     }
+}
+
+/* ======================================================================
+ * Settings > Screensaver > CLOCK STYLE: font, size, time format, date and
+ * colour of the clock screensaver.  PREVIEW shows it; a tap comes back.
+ * ====================================================================== */
+
+static lv_obj_t *csp_font_btn[SS_CLK_FONTS];
+static lv_obj_t *csp_size_btn[SS_CLK_SIZES];
+static lv_obj_t *csp_fmt_btn[SS_CLK_FMTS];
+static lv_obj_t *csp_date_btn[SS_CLK_DATES];
+static lv_obj_t *csp_col_btn[SS_CLK_COLS];
+static lv_obj_t *csp_date_sample = NULL;
+static bool ss_preview_from_clock = false;     /* PREVIEW from this page: come back here */
+
+static void csp_refresh(void)
+{
+    for (int i = 0; i < SS_CLK_FONTS; i++) ssp_style_choice(csp_font_btn[i], i == ss_clk_font);
+    for (int i = 0; i < SS_CLK_SIZES; i++) ssp_style_choice(csp_size_btn[i], i == ss_clk_size);
+    for (int i = 0; i < SS_CLK_FMTS; i++)  ssp_style_choice(csp_fmt_btn[i], i == ss_clk_fmt);
+    for (int i = 0; i < SS_CLK_DATES; i++) ssp_style_choice(csp_date_btn[i], i == ss_clk_date);
+    for (int i = 0; i < SS_CLK_COLS; i++)  ssp_style_choice(csp_col_btn[i], i == ss_clk_col);
+
+    /* The date as it will look (today's, or an example before the time is set). */
+    char d[64];
+    time_t now = time(NULL);
+    struct tm t;
+    if (localtime_r(&now, &t) == NULL || !time_is_valid(&t)) {
+        memset(&t, 0, sizeof(t));
+        t.tm_year = 2026 - 1900; t.tm_mon = 9; t.tm_mday = 4; t.tm_wday = 0;
+    }
+    ss_clk_date_text(&t, d, sizeof(d));
+    lv_label_set_text(csp_date_sample, ss_clk_date ? d : "no date under the clock");
+}
+
+static void csp_choice_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    const int v = (int)(intptr_t)lv_event_get_user_data(e);     /* row * 10 + choice */
+    const int row = v / 10, i = v % 10;
+    switch (row) {
+        case 0: ss_clk_font = i; break;
+        case 1: ss_clk_size = i; break;
+        case 2: ss_clk_fmt  = i; break;
+        case 3: ss_clk_date = i; break;
+        default: ss_clk_col = i; break;
+    }
+    screensaver_update_clock();
+    csp_refresh();
+    ssp_save();
+}
+
+static void csp_hide(void)
+{
+    if (csp_overlay != NULL) lv_obj_add_flag(csp_overlay, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void csp_close_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) csp_hide();
+}
+
+static void csp_back_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_CLICKED) ssp_show();
+}
+
+static void csp_preview_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    csp_hide();
+    /* Show the clock with the paused song if that's the chosen look. */
+    ss_preview_view = (ss_pause_mode == 1 && ss_have_track) ? SS_VIEW_CLOCK_COVER : SS_VIEW_CLOCK;
+    ss_preview_from_clock = true;
+    screensaver_preview_show();
+}
+
+static void csp_show(void)
+{
+    if (csp_overlay == NULL) return;
+    nav_hide_panels();
+    csp_refresh();
+    ui_show_panel(csp_overlay);
+}
+
+static void csp_row(lv_obj_t *p, const char *title, int y, int row, int count,
+                    const char *const *names, lv_obj_t **btns)
+{
+    ssp_label(p, title, &p4_font_18, UI_TEXT, 30, y);
+    for (int i = 0; i < count; i++) {
+        lv_obj_t *b = create_button(p, names[i], 164, 46);
+        lv_obj_set_pos(b, 30 + i * 174, y + 26);
+        lv_obj_add_event_cb(b, csp_choice_event_cb, LV_EVENT_CLICKED, (void *)(intptr_t)(row * 10 + i));
+        btns[i] = b;
+    }
+}
+
+static void csp_create(lv_obj_t *screen)
+{
+    lv_obj_t *p = nav_panel_create(screen, "CLOCK STYLE", csp_close_event_cb);
+    csp_overlay = p;
+
+    lv_obj_t *back = create_button(p, LV_SYMBOL_LEFT "  BACK", 150, 50);
+    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -196, 14);
+    lv_obj_add_event_cb(back, csp_back_event_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *prev = create_button(p, LV_SYMBOL_EYE_OPEN "  PREVIEW", 150, 50);
+    lv_obj_align(prev, LV_ALIGN_TOP_RIGHT, -362, 14);
+    lv_obj_add_event_cb(prev, csp_preview_event_cb, LV_EVENT_CLICKED, NULL);
+
+    static const char *const fonts[SS_CLK_FONTS] = { "Classic", "Condensed", "Digital", "Elegant", "Future" };
+    static const char *const sizes[SS_CLK_SIZES] = { "Small", "Medium", "Large", "Huge" };
+    static const char *const fmts[SS_CLK_FMTS]   = { "12 h + AM/PM", "12 hour", "24 hour" };
+    static const char *const dates[SS_CLK_DATES] = { "Off", "Long", "Short", "Day first", "Numbers" };
+    static const char *const cols[SS_CLK_COLS]   = { "Theme colour", "White", "Dim" };
+
+    csp_row(p, "Font", 84, 0, SS_CLK_FONTS, fonts, csp_font_btn);
+    csp_row(p, "Size", 172, 1, SS_CLK_SIZES, sizes, csp_size_btn);
+    csp_row(p, "Time", 260, 2, SS_CLK_FMTS, fmts, csp_fmt_btn);
+    csp_row(p, "Date", 348, 3, SS_CLK_DATES, dates, csp_date_btn);
+    csp_row(p, "Colour", 436, 4, SS_CLK_COLS, cols, csp_col_btn);
+    csp_date_sample = ssp_label(p, "", &p4_font_16, UI_TEXT_SOFT, 110, 349);
+    ssp_label(p, "Dim is easiest on the eyes in a dark bedroom.", &p4_font_14, UI_TEXT_DIM, 560, 476);
 }
 
 /* ======================================================================

@@ -1,0 +1,10 @@
+Clock screensaver fonts, all under the SIL Open Font License 1.1
+(https://openfontlicense.org):
+
+  Montserrat        - Copyright The Montserrat Project Authors
+  Oswald            - Copyright The Oswald Project Authors
+  DSEG7 Classic     - Copyright keshikan (https://www.keshikan.net)
+  DM Serif Display  - Copyright The DM Serif Project Authors
+  Orbitron          - Copyright The Orbitron Project Authors
+
+The licence text is at https://openfontlicense.org (the same for all of them).

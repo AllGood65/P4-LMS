@@ -47,7 +47,7 @@ A 7" touchscreen controller for whole-house music, built on a Waveshare ESP32-P4
 
 ## Updating
 
-Later versions can be installed from the web settings page: **Firmware update** › choose the new `P4-LMS.bin` (the app file from a build, not the combined release file) › **Install**. If a new version fails to start properly, the display goes back to the previous one by itself.
+Later versions can be installed from the web settings page: **Firmware update** › choose the new `P4-LMS.bin` (the app file from a build, not the combined release file; `build-v3/P4-LMS.bin` for a [chip v3 board](#newer-boards-chip-v3)) › **Install**. If a new version fails to start properly, the display goes back to the previous one by itself.
 
 ## Building from source
 
@@ -61,6 +61,17 @@ idf.py -p <PORT> flash monitor
 ```
 
 To make a single combined file for the Releases page: `idf.py merge-bin` (creates `build/merged-binary.bin`).
+
+### Newer boards (chip v3)
+
+Boards made from mid-2026 can have an ESP32-P4 chip revision **v3.x** (the flash tool says e.g. "this chip is revision v3.2"). Firmware for v1.x chips does not run on v3.x chips, and the other way round, so build those boards with the extra `sdkconfig.defaults.rev3` settings in a separate build folder:
+
+```
+idf.py -B build-v3 -D SDKCONFIG=sdkconfig.v3 -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.rev3" build
+idf.py -B build-v3 -D SDKCONFIG=sdkconfig.v3 -p <PORT> flash monitor
+```
+
+For web updates on a v3 board use `build-v3/P4-LMS.bin`; the update page refuses a file built for the other chip revision.
 
 Board-specific defaults (starting server address, time zone, and more) are at the top of `main/parts/02_config.c`. The code is split into numbered files in `main/parts/`, which `main/main.c` includes in order.
 

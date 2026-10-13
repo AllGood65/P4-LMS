@@ -18,6 +18,7 @@
 #include "esp_http_server.h"
 #include "esp_ota_ops.h"
 #include "esp_app_desc.h"
+#include "esp_chip_info.h"
 #include <stdarg.h>
 
 #define WEB_NVS_HA_BASE  "ha_base"
@@ -245,7 +246,7 @@ static const ha_map_entry_t *ha_map_find(const char *id)
 static const char web_update_section[] =
     "<section style='margin-top:14px'><h2>Firmware update</h2>"
     "<div class='small'>Choose <b>build\\P4-LMS.bin</b> from your project folder after "
-    "<code>idf.py build</code>. The display checks it, installs it in its spare slot and restarts. "
+    "<code>idf.py build</code> (a chip v3 board: <b>build-v3\\P4-LMS.bin</b> from the v3 build). The display checks it, installs it in its spare slot and restarts. "
     "If the new version fails to start properly it goes back to this one by itself.</div>"
     "<label>Firmware file</label><input type='file' id='fw' accept='.bin'>"
     "<div style='margin-top:10px'><button type='button' onclick='fwUp()'>Install</button></div>"
@@ -345,6 +346,25 @@ static esp_err_t web_post_update(httpd_req_t *req)
             }
             memcpy(new_version, buf + 48, 32);
             new_version[32] = '\0';
+            /* Built for the other kind of board?  ESP32-P4 chips v1.x and v3.x
+             * need different builds; say so instead of "damaged" later. */
+            {
+                /* image header: min_chip_rev_full at byte 15, max_chip_rev_full at 17 */
+                const unsigned min_rev = (unsigned)buf[15] | ((unsigned)buf[16] << 8);
+                const unsigned max_rev = (unsigned)buf[17] | ((unsigned)buf[18] << 8);
+                esp_chip_info_t ci;
+                esp_chip_info(&ci);
+                const unsigned chip = ci.revision;                 /* e.g. 302 = v3.2 */
+                if (chip < min_rev || (max_rev != 0 && max_rev != 0xFFFF && chip > max_rev)) {
+                    static char rev_msg[200];
+                    snprintf(rev_msg, sizeof(rev_msg),
+                             "That file was built for the other board: this display has chip v%u.%u. "
+                             "Use %s - nothing was changed.", chip / 100, chip % 100,
+                             chip >= 300 ? "build-v3\\P4-LMS.bin (the v3 build)" : "build\\P4-LMS.bin (the normal build)");
+                    fail = rev_msg;
+                    break;
+                }
+            }
             if (esp_ota_begin(part, (size_t)total, &h) != ESP_OK) {
                 fail = "Could not prepare the spare slot - nothing was changed.";
                 break;
@@ -521,7 +541,7 @@ static esp_err_t web_send_page(httpd_req_t *req, const char *notice, bool notice
                 "<div><label>Deep dim brightness (%%)</label>"
                 "<input type='number' name='bl_dp' min='1' max='100' value='%d'></div>"
                 "<div><label>While music plays</label><select name='ss_pm'>"
-                "<option value='0'%s>Stay on Now Playing</option>"
+                "<option value='0'%s>Off (stay on Now Playing)</option>"
                 "<option value='1'%s>Album art</option>"
                 "<option value='2'%s>Cover wall</option>"
                 "<option value='3'%s>Big text</option>"

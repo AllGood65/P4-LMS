@@ -732,8 +732,9 @@ static void screensaver_timer_cb(lv_timer_t *timer)
         if (want < 0) {
             return;                         /* playing, and set to stay on Now Playing */
         }
-        if (want == SS_VIEW_ART && visualizer_visible) {
-            return;                         /* the visualizer was opened on purpose */
+        if (current_player_playing && visualizer_visible) {
+            return;                         /* the VU meters / visualizer were opened on purpose:
+                                               no screensaver over them while music plays */
         }
         /* Idle = time since the last play/pause change AND since the last touch,
          * whichever is more recent.  Without the touch part, browsing SOURCE

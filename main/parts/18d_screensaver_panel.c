@@ -181,7 +181,7 @@ static void ssp_create(lv_obj_t *screen)
     ssp_overlay = p;
     ui_add_settings_back(p);
 
-    static const char *const play_names[SSP_CHOICES]  = { "Now Playing", "Album art", "Cover wall",
+    static const char *const play_names[SSP_CHOICES]  = { "Off", "Album art", "Cover wall",
                                                           "Big text", "VU meters" };
     static const char *const pause_names[SSP_CHOICES] = { "Clock", "Clock + cover", "Analog clock",
                                                           "Cover wall", "Weather" };

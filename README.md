@@ -25,14 +25,18 @@ A 7" touchscreen controller for whole-house music, built on a Waveshare ESP32-P4
 <table>
 <tr>
 <td><img src="docs/rooms.jpg" alt="Rooms: every player with its song, volume and system power"><br><b>Rooms</b>: every player, its volume and system power</td>
-<td><img src="docs/library.jpg" alt="Library: album covers for an artist"><br><b>Library</b>: albums with cover art</td>
+<td><img src="docs/library.jpg" alt="Library: an artist's albums with cover art"><br><b>Library</b>: albums with cover art</td>
 </tr>
 <tr>
-<td><img src="docs/queue.jpg" alt="Queue with the playing song marked"><br><b>Queue</b>: move, remove, save as a playlist</td>
+<td><img src="docs/album.jpg" alt="An album's songs"><br><b>Albums</b>: play, queue or pick several songs</td>
+<td><img src="docs/queue.jpg" alt="Queue with one song's controls open"><br><b>Queue</b>: move, play next, favourite, remove</td>
+</tr>
+<tr>
 <td><img src="docs/visualizer.jpg" alt="Music visualizer"><br><b>Visualizer</b>: driven by the built-in microphone</td>
+<td><img src="docs/screensaver.jpg" alt="Screensaver settings"><br><b>Screensavers</b>: what shows while playing or paused, and brightness</td>
 </tr>
 <tr>
-<td><img src="docs/screensaver.jpg" alt="Album art screensaver"><br><b>Screensavers</b>: album art, clocks, weather and more</td>
+<td><img src="docs/clock.jpg" alt="Clock style settings"><br><b>Clock styles</b>: font, size, 12/24 h, date and colour</td>
 <td><img src="docs/themes.jpg" alt="Colour theme picker"><br><b>Colour themes</b></td>
 </tr>
 </table>

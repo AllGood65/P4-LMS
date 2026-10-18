@@ -20,6 +20,23 @@ A 7" touchscreen controller for whole-house music, built on a Waveshare ESP32-P4
 - **Web settings page:** Home Assistant setup, power switches, weather location, time zone, settings backup/restore, and firmware updates over Wi-Fi
 - **Location profiles:** remembers a separate Lyrion server and players for each Wi-Fi network
 
+## Screenshots
+
+<table>
+<tr>
+<td><img src="docs/rooms.jpg" alt="Rooms: every player with its song, volume and system power"><br><b>Rooms</b>: every player, its volume and system power</td>
+<td><img src="docs/library.jpg" alt="Library: album covers for an artist"><br><b>Library</b>: albums with cover art</td>
+</tr>
+<tr>
+<td><img src="docs/queue.jpg" alt="Queue with the playing song marked"><br><b>Queue</b>: move, remove, save as a playlist</td>
+<td><img src="docs/visualizer.jpg" alt="Music visualizer"><br><b>Visualizer</b>: driven by the built-in microphone</td>
+</tr>
+<tr>
+<td><img src="docs/screensaver.jpg" alt="Album art screensaver"><br><b>Screensavers</b>: album art, clocks, weather and more</td>
+<td><img src="docs/themes.jpg" alt="Colour theme picker"><br><b>Colour themes</b></td>
+</tr>
+</table>
+
 ## Hardware
 
 - [Waveshare ESP32-P4-WIFI6-Touch-LCD-7B](https://www.waveshare.com/esp32-p4-wifi6-touch-lcd-7b.htm) (7", 1024×600, ESP32-P4 with an ESP32-C6 for Wi-Fi)

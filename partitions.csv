@@ -1,0 +1,8 @@
+# Name,     Type, SubType, Offset,   Size,  Flags
+# Two firmware slots for over-the-air updates.  nvs (your saved settings)
+# stays exactly where it was, so nothing saved on the board is lost.
+nvs,        data, nvs,     0x9000,   24K,
+otadata,    data, ota,     0xF000,   8K,
+phy_init,   data, phy,     0x11000,  4K,
+ota_0,      app,  ota_0,   0x20000,  4M,
+ota_1,      app,  ota_1,   0x420000, 4M,

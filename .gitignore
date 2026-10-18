@@ -1,0 +1,17 @@
+# ESP-IDF build output and local configuration
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+*.bin
+!docs/*.bin
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Python virtual environments
+venv/
+.venv/

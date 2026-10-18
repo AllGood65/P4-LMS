@@ -20,6 +20,17 @@ A 7" touchscreen controller for whole-house music, built on a Waveshare ESP32-P4
 - **Web settings page:** Home Assistant setup, power switches, weather location, time zone, settings backup/restore, and firmware updates over Wi-Fi
 - **Location profiles:** remembers a separate Lyrion server and players for each Wi-Fi network
 
+## Screenshots
+
+| | |
+| --- | --- |
+| <img src="docs/screenshots/now-playing.jpg" alt="Now Playing" width="420"><br>Now Playing | <img src="docs/screenshots/rooms.jpg" alt="Rooms" width="420"><br>Rooms |
+| <img src="docs/screenshots/play-together.jpg" alt="Grouping rooms" width="420"><br>Grouping rooms | <img src="docs/screenshots/library.jpg" alt="Library" width="420"><br>Library |
+| <img src="docs/screenshots/queue.jpg" alt="Queue" width="420"><br>Queue | <img src="docs/screenshots/visualizer.jpg" alt="Visualizer" width="420"><br>Visualizer |
+| <img src="docs/screenshots/screensaver-album-art.jpg" alt="Album art screensaver" width="420"><br>Album art screensaver | <img src="docs/screenshots/screensaver-settings.jpg" alt="Screensaver settings" width="420"><br>Screensaver settings |
+| <img src="docs/screenshots/clock-style.jpg" alt="Clock styles" width="420"><br>Clock styles | <img src="docs/screenshots/colour-themes.jpg" alt="Colour themes" width="420"><br>Colour themes |
+| <img src="docs/screenshots/settings.jpg" alt="Settings" width="420"><br>Settings |  |
+
 ## Hardware
 
 - [Waveshare ESP32-P4-WIFI6-Touch-LCD-7B](https://www.waveshare.com/esp32-p4-wifi6-touch-lcd-7b.htm) (7", 1024×600, ESP32-P4 with an ESP32-C6 for Wi-Fi)

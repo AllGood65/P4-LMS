@@ -19,4 +19,4 @@ Services used at run time (not included in the firmware):
 - [Open-Meteo](https://open-meteo.com/) weather and geocoding APIs - free for non-commercial use, data under CC BY 4.0. Weather data by Open-Meteo.com.
 - [Lyrion Music Server](https://lyrion.org/) and [Home Assistant](https://www.home-assistant.io/) run on your own network.
 
-The screenshot in `docs/` shows cover art from "CC BY: FREE TO USE - Chill/Study/Lounge Instrumentals" by 1000 Handz ([Free Music Archive](https://freemusicarchive.org/music/1000-handz/cc-by-free-to-use-chillstudylounge-instrumentals), CC BY 4.0).
+The screenshots in `docs/` show cover art from "CC BY: FREE TO USE - Chill/Study/Lounge Instrumentals" by 1000 Handz ([Free Music Archive](https://freemusicarchive.org/music/1000-handz/cc-by-free-to-use-chillstudylounge-instrumentals), CC BY 4.0).

@@ -6,7 +6,7 @@ A 7" touchscreen controller for whole-house music, built on a Waveshare ESP32-P4
 
 ## Features
 
-- **Now Playing:** cover art, track info, play/pause/skip, volume, and a live VU meter from the board's microphone
+- **Now Playing:** cover art, track info, play/pause/skip, volume with −/+ buttons and one-tap mute, and a live VU meter from the board's microphone
 - **Rooms:** every player on one screen, with what's playing, its volume, one-tap room switching and grouping rooms to play in sync
 - **System power:** one switch per room turns the amp (and an optional pre-amp) on and off through Home Assistant, in a configurable order with a delay, so there's no speaker thump. A power button on Now Playing does the same for the current room
 - **Music browsing:** artists, albums with cover art, genres, folders, search, favourites, and picking several songs at once. Lists scroll and keep loading as you go, even in large libraries
@@ -37,11 +37,13 @@ A 7" touchscreen controller for whole-house music, built on a Waveshare ESP32-P4
 
 ## First-time setup
 
-1. **Wi-Fi:** on the display, go to **Settings › Wi-Fi**, tap **SCAN**, and choose your network.
-2. **Lyrion server:** go to **Settings › Lyrion server** and tap **FIND SERVERS**. Choose yours; the display restarts with that server's players.
+On its first start the display walks you through the first two steps by itself: it opens the Wi-Fi picker, then (if it can't find your server on its own) the Lyrion server finder.
+
+1. **Wi-Fi:** choose your network and enter its password. To change it later: **Settings › Wi-Fi**, tap **SCAN**.
+2. **Lyrion server:** choose your server from the list; the display restarts with that server's players. To change it later: **Settings › Lyrion server** › **FIND SERVERS**.
 3. **Web settings:** open `http://p4lms.local/` in a browser, or scan the QR code on **Settings › About** with your phone (the About screen also shows the IP address if `p4lms.local` doesn't work on your network). There you can set:
    - your **time zone** and **weather location**
-   - **Home Assistant:** its address and a long-lived access token (in Home Assistant: your profile › Security › Long-lived access tokens)
+   - **Home Assistant:** its address and a long-lived access token (in Home Assistant: your profile › Security › Long-lived access tokens). The page shows whether it connected (**Test** checks again), and with an administrator's token it suggests your switch names as you type.
    - **power switches** for each player, with the pre-amp order and delay
 4. **Back up** your settings from the bottom of the web page once everything is set.
 

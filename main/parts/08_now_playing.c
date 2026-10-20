@@ -194,27 +194,25 @@ static void format_time_value(
     if (seconds < 0) {
         seconds = 0;
     }
+    if (seconds > 359999.0) {
+        seconds = 359999.0;                 /* 99:59:59 at most */
+    }
 
 
     int total_seconds =
         (int)(seconds + 0.5);
 
 
-    int minutes =
-        total_seconds / 60;
+    /* "3:07", or "1:28:00" past an hour (long mixes and YouTube streams) */
+    const int hours = total_seconds / 3600;
+    const int minutes = (total_seconds / 60) % 60;
+    const int secs = total_seconds % 60;
 
-
-    int secs =
-        total_seconds % 60;
-
-
-    snprintf(
-        buffer,
-        buffer_size,
-        "%d:%02d",
-        minutes,
-        secs
-    );
+    if (hours > 0) {
+        snprintf(buffer, buffer_size, "%d:%02d:%02d", hours, minutes, secs);
+    } else {
+        snprintf(buffer, buffer_size, "%d:%02d", minutes, secs);
+    }
 }
 
 
@@ -694,10 +692,43 @@ static void ui_apply_house_status_locked(void)
 }
 
 
+/* The right-hand time: the song's length (as most players show it), or -
+ * after a tap on it - what's left, counting down.  Remembered. */
+#define NP_NVS_TIME_LEFT "np_left"
+static bool np_time_left = false;
+static double np_last_elapsed = 0.0, np_last_duration = 0.0;
+
+static void playback_render_locked(double elapsed, double duration);
+
+static void np_time_left_load(void)
+{
+    nvs_handle_t nvs;
+    uint8_t v = 0;
+    if (nvs_open(PLAYER_NVS_NAMESPACE, NVS_READONLY, &nvs) == ESP_OK) {
+        if (nvs_get_u8(nvs, NP_NVS_TIME_LEFT, &v) == ESP_OK) np_time_left = (v != 0);
+        nvs_close(nvs);
+    }
+}
+
+static void np_total_tap_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    np_time_left = !np_time_left;
+    nvs_handle_t nvs;
+    if (nvs_open(PLAYER_NVS_NAMESPACE, NVS_READWRITE, &nvs) == ESP_OK) {
+        nvs_set_u8(nvs, NP_NVS_TIME_LEFT, np_time_left ? 1 : 0);
+        nvs_commit(nvs);
+        nvs_close(nvs);
+    }
+    playback_render_locked(np_last_elapsed, np_last_duration);   /* show it now */
+}
+
 /* Elapsed / total labels and progress bar (LVGL lock held by the caller). */
 static void playback_render_locked(double elapsed, double duration)
 {
     char text[24];                           /* room for "-" + the longest time */
+    np_last_elapsed = elapsed;
+    np_last_duration = duration;
 
     format_time_value(elapsed, text, sizeof(text));
     if (duration > 0.0) {
@@ -709,8 +740,11 @@ static void playback_render_locked(double elapsed, double duration)
         ui_set_label(elapsed_label, ss_have_track ? live : "");
     }
 
-    /* The right-hand time counts down what's left of the song. */
-    if (duration > 0.0) {
+    /* The right-hand time: the length, or (tapped) what's left. */
+    if (duration > 0.0 && !np_time_left) {
+        format_time_value(duration, text, sizeof(text));
+        ui_set_label(total_label, text);
+    } else if (duration > 0.0) {
         double left = duration - elapsed;
         if (left < 0.0) left = 0.0;
         char t[16];

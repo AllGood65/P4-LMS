@@ -72,13 +72,14 @@ static void early_nvs_init(void)
 
 static void theme_button_event_cb(lv_event_t *e);
 
-/* How full LVGL's own memory pool is (it has a fixed size). */
+/* Free memory at a moment worth noting.  (LVGL uses the C library's malloc
+ * here, so its own memory monitor always says 0 - the heap is what counts.) */
 static void lvgl_mem_log(const char *when)
 {
-    lv_mem_monitor_t mon;
-    lv_mem_monitor(&mon);
-    ESP_LOGI(TAG, "LVGL memory (%s): %u%% used, %u bytes free, largest free block %u",
-             when, (unsigned)mon.used_pct, (unsigned)mon.free_size, (unsigned)mon.free_biggest_size);
+    ESP_LOGD(TAG, "Memory (%s): internal free %u (largest %u), PSRAM free %u", when,
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 }
 
 /* The colour preview squares are painted by the card itself (one object) instead

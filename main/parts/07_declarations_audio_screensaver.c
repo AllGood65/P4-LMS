@@ -54,7 +54,7 @@ static bool png_decode_rgb565_buffer(const uint8_t *png_data, size_t png_size,
         return false;
     }
 
-    ESP_LOGI(TAG, "PNG reported dimensions: %ux%u",
+    ESP_LOGD(TAG, "PNG reported dimensions: %ux%u",
              (unsigned)image.width, (unsigned)image.height);
 
     if (image.width == 0 || image.height == 0 ||

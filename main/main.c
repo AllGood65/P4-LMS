@@ -939,6 +939,11 @@ void app_main(void)
 
 
     lv_obj_align(total_label, LV_ALIGN_TOP_RIGHT, -34, 288);   /* right edge of the bar */
+    /* Tap: the song's length <-> the time left (remembered). */
+    np_time_left_load();
+    lv_obj_add_flag(total_label, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_ext_click_area(total_label, 18);
+    lv_obj_add_event_cb(total_label, np_total_tap_event_cb, LV_EVENT_CLICKED, NULL);
 
 
     /* ========================================================

@@ -2119,15 +2119,10 @@ static void microphone_task(void *arg)
             visualizer_analyze_audio(audio_buffer, frame_count);
         }
 
+        /* (A "Mic VU" level line every 3 s is available at debug log level.) */
         if ((++log_counter % 100U) == 0U) {
-            ESP_LOGI(
-                TAG,
-                "Mic VU: L=%d seg R=%d seg | peak L=%ld R=%ld",
-                level_l,
-                level_r,
-                (long)peak_l,
-                (long)peak_r
-            );
+            ESP_LOGD(TAG, "Mic VU: L=%d seg R=%d seg | peak L=%ld R=%ld",
+                     level_l, level_r, (long)peak_l, (long)peak_r);
         }
     }
 }

@@ -107,6 +107,7 @@ static const char *const about_tips[] = {
     "Tap the VU meters for the full-screen visualizer",
     "Hold + on a song to play it next",
     "Tap the speaker icon to mute",
+    "Tap the song length to see the time left",
 };
 
 static void about_show(void)
@@ -138,7 +139,7 @@ static void about_show(void)
     ui_text(about_overlay, "TIPS", &p4_font_18, UI_ACCENT, 30, 240, 0);
     for (size_t i = 0; i < sizeof(about_tips) / sizeof(about_tips[0]); i++) {
         snprintf(line, sizeof(line), LV_SYMBOL_BULLET "  %s", about_tips[i]);
-        lv_obj_t *l = ui_text(about_overlay, line, &p4_font_18, UI_TEXT, 30, 276 + (int)i * 40, 0);
+        lv_obj_t *l = ui_text(about_overlay, line, &p4_font_18, UI_TEXT, 30, 274 + (int)i * 34, 0);
         lv_obj_set_width(l, 580);
         lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
     }

@@ -226,6 +226,54 @@ static void web_room_field(char *out, size_t n, const char *mac)
     out[o] = '\0';
 }
 
+/* Tick-box name for "show this room": "rk" + its MAC without colons. */
+static void web_room_pick_field(char *out, size_t n, const char *mac)
+{
+    web_room_field(out, n, mac);
+    if (n > 1 && out[0]) out[1] = 'k';
+}
+
+/* Every room the page can offer: this display's rooms first (in their
+ * order), then the server's other players, connected ones first.  Only the
+ * web server task uses these, one request at a time. */
+#define WEB_MAX_ROOMS 32
+static lyrion_player_t web_rooms[WEB_MAX_ROOMS];
+static uint8_t web_rooms_online[WEB_MAX_ROOMS];
+
+/* Returns how many rooms, or -1 when the server could not be asked (the
+ * page then leaves the room choice out rather than guess). */
+static int web_rooms_load(void)
+{
+    static lyrion_player_t all[WEB_MAX_ROOMS];
+    static uint8_t on[WEB_MAX_ROOMS];
+    if (lms_active < 0 || !lyrion_server_base[0]) return -1;
+    const int na = lms_fetch_players_ex(lyrion_server_base, all, WEB_MAX_ROOMS, on, 4000);
+    if (na < 0) return -1;
+    int n = 0;
+    for (int i = 0; i < lyrion_player_count && n < WEB_MAX_ROOMS; i++) {
+        web_rooms[n] = lyrion_players[i];
+        web_rooms_online[n] = 0;
+        for (int k = 0; k < na; k++) {
+            if (strcasecmp(all[k].id, lyrion_players[i].id) == 0) {
+                web_rooms_online[n] = on[k];
+                break;
+            }
+        }
+        n++;
+    }
+    for (int k = 0; k < na && n < WEB_MAX_ROOMS; k++) {
+        bool mine = false;
+        for (int i = 0; i < lyrion_player_count; i++) {
+            if (strcasecmp(all[k].id, lyrion_players[i].id) == 0) { mine = true; break; }
+        }
+        if (mine) continue;
+        web_rooms[n] = all[k];
+        web_rooms_online[n] = on[k];
+        n++;
+    }
+    return n;
+}
+
 /* ------------------------------------------------------------ page helpers */
 typedef struct { char *buf; size_t len, cap; } web_out_t;
 
@@ -737,6 +785,29 @@ static esp_err_t web_send_page(httpd_req_t *req, const char *notice, bool notice
             web_add_escaped(&o, lyrion_players[i].name);
         }
         web_add(&o, "</div>");
+        /* Which rooms this display shows: a tick box for every player on the
+         * server, the current ones ticked, at most LMS_MAX_PLAYERS. */
+        const int nr = web_rooms_load();
+        if (nr > 1) {
+            web_add(&o, "<h3>Rooms on this display</h3><div class='small'>Tick up to %d rooms to show on the "
+                        "display. Saving a change restarts the display.</div>"
+                        "<input type='hidden' name='rk_on' value='1'><div class='row'>", LMS_MAX_PLAYERS);
+            for (int i = 0; i < nr; i++) {
+                char fname[24];
+                web_room_pick_field(fname, sizeof(fname), web_rooms[i].id);
+                web_add(&o, "<label style='margin:6px 0'><input type='checkbox' class='rk' name='%s' value='1'%s "
+                            "onchange='rkMax(this)'> ",
+                        fname, i < lyrion_player_count ? " checked" : "");
+                web_add_escaped(&o, web_rooms[i].name);
+                if (!web_rooms_online[i]) web_add(&o, " <span class='small'>(not connected)</span>");
+                web_add(&o, "</label>");
+            }
+            web_add(&o, "</div><script>function rkMax(c){var n=0,b=document.querySelectorAll('.rk');"
+                        "for(var i=0;i<b.length;i++)if(b[i].checked)n++;"
+                        "if(n>%d){c.checked=false;alert('The display can show up to %d rooms.');}"
+                        "if(n==0){c.checked=true;alert('Keep at least one room.');}}</script>",
+                    LMS_MAX_PLAYERS, LMS_MAX_PLAYERS);
+        }
         /* Room order: a position for each room (saved for this location). */
         if (lyrion_player_count > 1 && lms_active >= 0) {
             web_add(&o, "<h3>Room order</h3><div class='small'>The order rooms appear on the display. "
@@ -960,7 +1031,7 @@ static esp_err_t web_get_root(httpd_req_t *req)
     const bool got = httpd_req_get_url_query_str(req, q, sizeof(q)) == ESP_OK;
     const char *notice = NULL;
     if (got && strcmp(q, "saved=1") == 0) notice = "Saved. Changes are active now.";
-    if (got && strcmp(q, "saved=2") == 0) notice = "Saved. The display is restarting with the new room order - "
+    if (got && strcmp(q, "saved=2") == 0) notice = "Saved. The display is restarting with the new rooms - "
                                                    "reload this page in about 15 seconds.";
     return web_send_page(req, notice, true);
 }
@@ -1151,10 +1222,60 @@ static esp_err_t web_post_save(httpd_req_t *req)
             order[b + 1] = t;
         }
         for (int i = 0; i < np; i++) if (order[i] != i) reorder = true;
+    } else {
+        for (int i = 0; i < np && i < LMS_MAX_PLAYERS; i++) order[i] = i;
+    }
+
+    /* Which rooms to show: the ticked ones, in the order above for rooms
+     * already on the display, then newly ticked rooms in the server's order.
+     * Nothing ticked, or a page without the tick boxes, leaves them alone. */
+    lyrion_player_t picked[LMS_MAX_PLAYERS];
+    int npick = 0;
+    bool repick = false;
+    web_field(body, "rk_on", v, sizeof(v));
+    if (v[0] == '1' && lms_active >= 0 && lms_active < lms_profile_count) {
+        const int nr = web_rooms_load();
+        bool tick[WEB_MAX_ROOMS] = { false };
+        int nt = 0;
+        for (int i = 0; i < nr; i++) {
+            char k[24];
+            web_room_pick_field(k, sizeof(k), web_rooms[i].id);
+            web_field(body, k, v, sizeof(v));
+            tick[i] = v[0] == '1';
+            if (tick[i]) nt++;
+        }
+        if (nr > 0 && nt > 0) {
+            /* web_rooms starts with this display's rooms, so index i < np
+             * is lyrion_players[i]. */
+            for (int i = 0; i < np && npick < LMS_MAX_PLAYERS; i++) {
+                if (order[i] < nr && tick[order[i]]) picked[npick++] = lyrion_players[order[i]];
+            }
+            for (int i = np; i < nr && npick < LMS_MAX_PLAYERS; i++) {
+                if (tick[i]) picked[npick++] = web_rooms[i];
+            }
+            int kept = 0;
+            for (int i = 0; i < np; i++) if (i < nr && tick[i]) kept++;
+            repick = npick > 0 && (npick != np || kept != np);
+        }
     }
     heap_caps_free(body);
 
-    if (reorder) {
+    if (repick) {
+        lms_profile_t *pr = &lms_profiles[lms_active];
+        int new_sel = 0;
+        const char *cur = (current_player_index >= 0 && current_player_index < np)
+                              ? lyrion_players[current_player_index].id : "";
+        for (int i = 0; i < npick; i++) {
+            if (strcasecmp(picked[i].id, cur) == 0) new_sel = i;
+        }
+        memset(pr->players, 0, sizeof(pr->players));
+        memcpy(pr->players, picked, sizeof(lyrion_player_t) * npick);
+        pr->count = (uint8_t)npick;
+        lms_profiles_save();
+        save_selected_player(new_sel);          /* same room if it is still shown */
+        ESP_LOGI(TAG, "Rooms changed to %d on the web page - restarting to apply it", npick);
+        reorder = true;                         /* same restart and notice below */
+    } else if (reorder) {
         lms_profile_t *pr = &lms_profiles[lms_active];
         lyrion_player_t sorted[LMS_MAX_PLAYERS];
         int new_sel = 0;
@@ -1173,7 +1294,7 @@ static esp_err_t web_post_save(httpd_req_t *req)
     }
     ESP_LOGI(TAG, "Settings saved from the web page");
     if (reorder) {
-        lms_request_restart("room order changed on the web page");
+        lms_request_restart("rooms changed on the web page");
     } else {
         ui_toast_post("Settings saved from the web page");
     }

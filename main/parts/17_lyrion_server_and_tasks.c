@@ -104,16 +104,19 @@ static void lms_short_name(const char *name, char *out, size_t out_size)
 
 /* Ask a server for its players (connected ones first, up to four).
  * Returns the number found, or -1 if the server could not be reached. */
-static int lms_fetch_players(const char *base, lyrion_player_t *out)
+/* Every player on the server, connected ones first, up to max.  connected
+ * (optional) gets 1/0 per player.  timeout_ms <= 0 uses the usual timeout. */
+static int lms_fetch_players_ex(const char *base, lyrion_player_t *out, int max,
+                                uint8_t *connected_out, int timeout_ms)
 {
     char url[96];
     snprintf(url, sizeof(url), "%s/jsonrpc.js", base);
-    char *buf = (char *)heap_caps_malloc(16384, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    char *buf = (char *)heap_caps_malloc(32768, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (buf == NULL) return -1;
 
     static const char req[] =
-        "{\"id\":1,\"method\":\"slim.request\",\"params\":[\"\",[\"players\",0,20]]}";
-    if (!http_post_json(url, req, buf, 16384)) {
+        "{\"id\":1,\"method\":\"slim.request\",\"params\":[\"\",[\"players\",0,100]]}";
+    if (!http_post_json_ex(url, req, buf, 32768, timeout_ms)) {
         heap_caps_free(buf);
         return -1;
     }
@@ -123,10 +126,10 @@ static int lms_fetch_players(const char *base, lyrion_player_t *out)
     cJSON *loop = cJSON_IsObject(res) ? cJSON_GetObjectItem(res, "players_loop") : NULL;
 
     int count = 0;
-    for (int pass = 0; pass < 2 && count < LMS_MAX_PLAYERS; pass++) {  /* connected first */
+    for (int pass = 0; pass < 2 && count < max; pass++) {  /* connected first */
         cJSON *p = NULL;
         cJSON_ArrayForEach(p, loop) {
-            if (count >= LMS_MAX_PLAYERS) break;
+            if (count >= max) break;
             cJSON *id = cJSON_GetObjectItem(p, "playerid");
             cJSON *nm = cJSON_GetObjectItem(p, "name");
             cJSON *isp = cJSON_GetObjectItem(p, "isplayer");
@@ -135,6 +138,7 @@ static int lms_fetch_players(const char *base, lyrion_player_t *out)
             if (cJSON_IsNumber(isp) && isp->valueint == 0) continue;
             const bool connected = cJSON_IsNumber(con) ? con->valueint != 0 : true;
             if ((pass == 0) != connected) continue;
+            if (connected_out) connected_out[count] = connected ? 1 : 0;
             lyrion_player_t *o = &out[count++];
             memset(o, 0, sizeof(*o));
             snprintf(o->id, sizeof(o->id), "%s", id->valuestring);
@@ -145,6 +149,12 @@ static int lms_fetch_players(const char *base, lyrion_player_t *out)
     }
     if (root) cJSON_Delete(root);
     return root ? count : -1;
+}
+
+/* The first LMS_MAX_PLAYERS rooms, as used when a server is first set up. */
+static int lms_fetch_players(const char *base, lyrion_player_t *out)
+{
+    return lms_fetch_players_ex(base, out, LMS_MAX_PLAYERS, NULL, 0);
 }
 
 /* ---- screen (LVGL lock held) ---- */

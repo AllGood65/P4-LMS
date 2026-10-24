@@ -17,7 +17,7 @@ A 7" touchscreen controller for whole-house music, built on a Waveshare ESP32-P4
 - **Colour themes**
 - **Screensavers:** album art, cover wall, big text, VU meters, clocks, and weather with a 3-day forecast (Open-Meteo, no account needed); the clock has 5 fonts, 4 sizes, 12/24-hour time, date styles and colours
 - **Sleep timer and alarms** that power the amps down and up in order
-- **Web settings page:** Home Assistant setup, power switches, weather location, time zone, settings backup/restore, and firmware updates over Wi-Fi
+- **Web settings page:** choose which rooms to show, Home Assistant setup, power switches, weather location, time zone, settings backup/restore, and firmware updates over Wi-Fi
 - **Location profiles:** remembers a separate Lyrion server and players for each Wi-Fi network
 
 ## Screenshots
@@ -51,11 +51,12 @@ A 7" touchscreen controller for whole-house music, built on a Waveshare ESP32-P4
 On its first start the display walks you through the first two steps by itself: it opens the Wi-Fi picker, then (if it can't find your server on its own) the Lyrion server finder.
 
 1. **Wi-Fi:** choose your network and enter its password. To change it later: **Settings › Wi-Fi**, tap **SCAN**.
-2. **Lyrion server:** choose your server from the list; the display restarts with that server's players. To change it later: **Settings › Lyrion server** › **FIND SERVERS**.
+2. **Lyrion server:** choose your server from the list; the display restarts with that server's players (up to 4 rooms; you can choose which ones on the web settings page). To change it later: **Settings › Lyrion server** › **FIND SERVERS**.
 3. **Web settings:** open `http://p4lms.local/` in a browser, or scan the QR code on **Settings › About** with your phone (the About screen also shows the IP address if `p4lms.local` doesn't work on your network). There you can set:
    - your **time zone** and **weather location**
    - **Home Assistant:** its address and a long-lived access token (in Home Assistant: your profile › Security › Long-lived access tokens). The page shows whether it connected (**Test** checks again), and with an administrator's token it suggests your switch names as you type.
    - **power switches** for each player, with the pre-amp order and delay
+   - **which rooms** the display shows (up to 4, from every player on your server) and their order
 4. **Back up** your settings from the bottom of the web page once everything is set.
 
 ## Updating

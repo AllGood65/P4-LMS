@@ -180,6 +180,8 @@ static void progress_seek_event_cb(lv_event_t *e)
     }
 }
 
+static void volume_unmute_first(void);   /* below */
+
 static void volume_slider_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
@@ -239,6 +241,7 @@ static void volume_slider_event_cb(lv_event_t *e)
      * The value is queued rather than sent directly from
      * the LVGL task.
      */
+    volume_unmute_first();
     queue_lyrion_command(
         LYRION_COMMAND_VOLUME,
         (int)value
@@ -249,14 +252,15 @@ static void volume_slider_event_cb(lv_event_t *e)
 /* ============================================================
  * MUTE (speaker icon) AND  - / +  VOLUME BUTTONS
  *
- * Tapping the speaker icon sets the volume to 0 and remembers what it was;
- * tapping it again puts that volume back.  The - and + buttons beside the
- * slider move the volume 5 at a time - easier than nudging a thin slider
- * with a finger.  All of them use the same command as the slider.
+ * The speaker icon uses Lyrion's own mute ("mixer muting"): Lyrion keeps
+ * the volume and puts it back on unmute, every app shows the room as muted,
+ * and plugins (e.g. for an AV receiver) see a real mute.  While a player is
+ * muted Lyrion reports its volume as a negative number.  The - and + buttons
+ * beside the slider move the volume 5 at a time - easier than nudging a thin
+ * slider with a finger.  Changing the volume while muted unmutes first.
  * ============================================================ */
 static lv_obj_t *volume_mute_button = NULL;   /* the speaker button left of "-" */
 static bool      volume_muted = false;
-static int       volume_before_mute = 30;      /* what to go back to on unmute */
 
 /* Speaker button: crossed-out speaker on an amber outline while muted. */
 static void volume_icon_apply_locked(void)
@@ -288,48 +292,51 @@ static void volume_send_now(int value)
     snprintf(volume_text, sizeof(volume_text), "%d%%", value);
     ui_set_label(volume_value_label, volume_text);
 
+    volume_unmute_first();
     queue_lyrion_command(LYRION_COMMAND_VOLUME, value);
+}
+
+/* Before a new volume is sent: if the room is muted, unmute it first, so
+ * the new volume is heard (and Lyrion doesn't keep a "muted" level). */
+static void volume_unmute_first(void)
+{
+    if (!volume_muted) return;
+    volume_muted = false;
+    queue_lyrion_command(LYRION_COMMAND_MUTE, 0);
+    volume_icon_apply_locked();
 }
 
 static void volume_icon_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED || volume_slider == NULL) return;
-    if (!volume_muted) {
-        const int now = (int)lv_slider_get_value(volume_slider);
-        if (now <= 0) return;                      /* already silent: nothing to remember */
-        volume_before_mute = now;
-        volume_muted = true;
-        volume_send_now(0);
-    } else {
-        volume_muted = false;
-        volume_send_now(volume_before_mute > 0 ? volume_before_mute : 30);
-    }
+    /* Status polls leave the mute look alone for a moment, until Lyrion has
+     * applied it. */
+    volume_user_touched = true;
+    volume_last_user_tick = lv_tick_get();
+    volume_muted = !volume_muted;
+    queue_lyrion_command(LYRION_COMMAND_MUTE, volume_muted ? 1 : 0);
     volume_icon_apply_locked();
 }
 
-/* - and + buttons; user data is the step (-5 or +5). */
+/* - and + buttons; user data is the step (-5 or +5).  While muted they
+ * start from the volume Lyrion kept (shown on the slider). */
 static void volume_step_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED || volume_slider == NULL) return;
     const int step = (int)(intptr_t)lv_event_get_user_data(e);
     int value = (int)lv_slider_get_value(volume_slider);
-    if (volume_muted && step > 0) value = 0;       /* + while muted starts up from silence */
     value += step;
     if (value < 0) value = 0;
     if (value > 100) value = 100;
-    if (volume_muted && value > 0) {
-        volume_muted = false;
-        volume_icon_apply_locked();
-    }
     volume_send_now(value);
 }
 
-/* Status poll (LVGL task): if the volume was turned up somewhere else
- * (web page, phone app) while we showed "muted", drop the muted look. */
-static void volume_mute_sync_locked(int server_volume)
+/* Status poll (LVGL task): show the room muted or not as Lyrion says, so a
+ * mute from another app (or Lyrion's web page) shows here too. */
+static void volume_mute_sync_locked(bool server_muted)
 {
-    if (volume_muted && server_volume > 0) {
-        volume_muted = false;
+    if (volume_muted != server_muted) {
+        volume_muted = server_muted;
         volume_icon_apply_locked();
     }
 }
@@ -342,8 +349,10 @@ static void volume_mute_sync_locked(int server_volume)
  *
  * Switches the current room's amp + pre-amp on or off, in the room's order
  * (the same as "System power" on the Rooms screen).  Lit when everything it
- * switches is on; hidden for rooms without power switches.  The command
- * task reads the switches every few seconds (np_power_poll).
+ * switches is on.  The command task reads the switches every few seconds
+ * (np_power_poll).  A room without Home Assistant power switches uses the
+ * player's own power in Lyrion instead (which plugins, e.g. for an AV
+ * receiver, can follow); its state comes with each status poll.
  * ============================================================ */
 static lv_obj_t *np_power_button = NULL;
 static int       np_power_state = -1;          /* -1 not known yet, 0 off, 1 on */
@@ -351,19 +360,30 @@ static bool      np_power_want = false;        /* what the last tap asked for   
 static uint32_t  np_power_touch = 0;
 static uint32_t  np_power_hold = 0;            /* ignore polls this long after a tap */
 static volatile bool np_power_poll_now = true;
+static int       np_lms_power = -1;            /* Lyrion power of the current room: -1 unknown */
+
+/* How a room's power button works: Home Assistant switches, the player's own
+ * power in Lyrion, or (switches set but no token) not at all. */
+enum { ROOM_POWER_NONE = 0, ROOM_POWER_LMS, ROOM_POWER_HA };
+static int room_power_mode(int room)
+{
+    const ha_player_switches_t *sw = ha_switches_for_index(room);
+    if (sw->amp_entity == NULL && sw->preamp_entity == NULL) return ROOM_POWER_LMS;
+    return HA_TOKEN_SET ? ROOM_POWER_HA : ROOM_POWER_NONE;
+}
 
 
 static void np_power_apply_locked(void)
 {
     if (np_power_button == NULL) return;
-    const ha_player_switches_t *sw = ha_switches_for_current();
-    if ((sw->amp_entity == NULL && sw->preamp_entity == NULL) || !HA_TOKEN_SET) {
+    const int mode = room_power_mode(current_player_index);
+    if (mode == ROOM_POWER_NONE) {
         lv_obj_add_flag(np_power_button, LV_OBJ_FLAG_HIDDEN);
         return;
     }
     lv_obj_clear_flag(np_power_button, LV_OBJ_FLAG_HIDDEN);
 
-    int st = np_power_state;
+    int st = (mode == ROOM_POWER_LMS) ? np_lms_power : np_power_state;
     if (np_power_hold > 0 && lv_tick_elaps(np_power_touch) < np_power_hold) st = np_power_want ? 1 : 0;
     const bool on = (st == 1);
     lv_obj_set_style_bg_color(np_power_button, lv_color_hex(on ? UI_ACCENT : UI_BUTTON), LV_PART_MAIN);
@@ -382,6 +402,7 @@ static void np_power_room_changed(void)
     volume_icon_apply_locked();
 
     np_power_state = -1;
+    np_lms_power = -1;
     np_power_hold = 0;
     np_power_poll_now = true;
     np_power_apply_locked();
@@ -395,6 +416,17 @@ static void np_power_event_cb(lv_event_t *e)
     const bool shown_on = (np_power_hold > 0 && lv_tick_elaps(np_power_touch) < np_power_hold)
                           ? np_power_want : (np_power_state == 1);
     const bool on = !shown_on;
+    if (room_power_mode(room) == ROOM_POWER_LMS) {
+        if (!queue_lyrion_command(LYRION_COMMAND_POWER, on ? 1 : 0)) return;
+        np_power_want = on;
+        np_power_touch = lv_tick_get();
+        np_power_hold = 4000u;              /* until a status poll has the new state */
+        np_power_apply_locked();
+        char msg[64];
+        snprintf(msg, sizeof(msg), "%s: player %s", lyrion_players[room].short_name, on ? "on" : "off");
+        ui_toast(msg);
+        return;
+    }
     if ((hs->amp_entity == NULL && hs->preamp_entity == NULL) || !HA_TOKEN_SET || !queue_ha_system(room, on)) {
         ui_toast(HA_TOKEN_SET ? "Couldn't reach Home Assistant" : "Set the Home Assistant token on the web page");
         return;
@@ -424,6 +456,27 @@ static void np_power_event_cb(lv_event_t *e)
 }
 
 typedef struct { int room; int state; } np_power_msg_t;
+
+static void np_lms_power_job(void *arg)
+{
+    const np_power_msg_t *m = (const np_power_msg_t *)arg;
+    if (m->room != current_player_index) return;      /* the room changed meanwhile */
+    np_lms_power = m->state;
+    np_power_apply_locked();
+}
+
+/* Status task: the current room's power as Lyrion reports it (-1 unknown).
+ * Only changes go to the screen. */
+static void np_lms_power_seen(int room, int power)
+{
+    static int last_room = -1, last_power = -2;
+    if (room == last_room && power == last_power) return;
+    np_power_msg_t m = { .room = room, .state = power };
+    if (ui_post(np_lms_power_job, &m, sizeof(m))) {   /* dropped: sent again next poll */
+        last_room = room;
+        last_power = power;
+    }
+}
 
 static void np_power_job(void *arg)
 {

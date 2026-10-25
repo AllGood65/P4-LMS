@@ -485,7 +485,8 @@ static void rooms_card_job(void *arg)
     rooms_group_mask[m->idx] = m->group_mask;
     rooms_set_linked_label(m->idx);
     lv_label_set_text(c->artist, m->state == 0 ? "" : m->artist);
-    lv_label_set_text(c->title, m->state == 0 ? "Not available" : (m->title[0] ? m->title : "Nothing queued"));
+    lv_label_set_text(c->title, m->state != 0 ? (m->title[0] ? m->title : "Nothing queued")
+                                : (m->lms_power == 0 ? "Switched off" : "Not available"));
 
     if (m->volume >= 0 && lv_tick_elaps(c->vol_touch) > ROOM_TOUCH_HOLD_MS) {
         lv_slider_set_value(c->vol_slider, m->volume, LV_ANIM_OFF);
@@ -495,15 +496,32 @@ static void rooms_card_job(void *arg)
     }
 
     const bool any = (m->amp != ROOM_SWITCH_NONE || m->pre != ROOM_SWITCH_NONE);
-    if (any) lv_obj_add_flag(c->no_sw_lbl, LV_OBJ_FLAG_HIDDEN);
-    else     lv_obj_clear_flag(c->no_sw_lbl, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(c->no_sw_lbl, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t *row_lbl = lv_obj_get_child(c->sys_row, 0);
+    const char *row_text = any ? "System power" : "Player power";
+    if (row_lbl != NULL && strcmp(lv_label_get_text(row_lbl), row_text) != 0) lv_label_set_text(row_lbl, row_text);
 
-    /* One "System power" switch: on only when everything it switches is on. */
+    /* No Home Assistant switches: the player's own power in Lyrion (hidden
+     * while the player isn't connected). */
     if (!any) {
-        lv_obj_add_flag(c->sys_row, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(c->sys_note, LV_OBJ_FLAG_HIDDEN);
+        if (m->lms_power < 0) {
+            lv_obj_add_flag(c->sys_row, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(c->sys_note, LV_OBJ_FLAG_HIDDEN);
+            return;
+        }
+        lv_obj_clear_flag(c->sys_row, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(c->sys_note, LV_OBJ_FLAG_HIDDEN);
+        if (lv_tick_elaps(c->sys_touch) > c->sys_hold) {
+            if (m->lms_power == 1) lv_obj_add_state(c->sys_sw, LV_STATE_CHECKED);
+            else                   lv_obj_clear_state(c->sys_sw, LV_STATE_CHECKED);
+        }
+        if (strcmp(lv_label_get_text(c->sys_note), "The player's power in Lyrion") != 0) {
+            lv_label_set_text(c->sys_note, "The player's power in Lyrion");
+        }
         return;
     }
+
+    /* One "System power" switch: on only when everything it switches is on. */
     lv_obj_clear_flag(c->sys_row, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(c->sys_note, LV_OBJ_FLAG_HIDDEN);
     const bool known = (m->amp == ROOM_SWITCH_NONE || m->amp >= 0) &&
@@ -611,6 +629,24 @@ static void room_system_event_cb(lv_event_t *e)
     lv_obj_t *sw = c->sys_sw;
     const bool on = lv_obj_has_state(sw, LV_STATE_CHECKED);
     const ha_player_switches_t *hs = ha_switches_for_index(i);
+    if (room_power_mode(i) == ROOM_POWER_LMS) {             /* no switches: Lyrion's power */
+        if (!queue_lyrion_command_for(i, LYRION_COMMAND_POWER, on ? 1 : 0)) {
+            if (on) lv_obj_clear_state(sw, LV_STATE_CHECKED); else lv_obj_add_state(sw, LV_STATE_CHECKED);
+            return;
+        }
+        c->sys_touch = lv_tick_get();
+        c->sys_hold = ROOM_TOUCH_HOLD_MS;
+        if (i == current_player_index) {          /* the Now Playing power button follows */
+            np_power_want = on;
+            np_power_touch = c->sys_touch;
+            np_power_hold = c->sys_hold;
+            np_power_apply_locked();
+        }
+        char msg[64];
+        snprintf(msg, sizeof(msg), "%s: player %s", lyrion_players[i].short_name, on ? "on" : "off");
+        ui_toast(msg);
+        return;
+    }
     if ((hs->amp_entity == NULL && hs->preamp_entity == NULL) || !HA_TOKEN_SET || !queue_ha_system(i, on)) {
         if (on) lv_obj_clear_state(sw, LV_STATE_CHECKED); else lv_obj_add_state(sw, LV_STATE_CHECKED);
         ui_toast(HA_TOKEN_SET ? "Couldn't reach Home Assistant" : "Set the Home Assistant token on the web page");

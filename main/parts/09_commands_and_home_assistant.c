@@ -52,6 +52,12 @@ static bool lyrion_send_command(const lyrion_command_t *command)
             if (v < 0 || v > 100) return false;
             snprintf(args, sizeof(args), "\"mixer\",\"volume\",\"%d\"", v);
             break;
+        case LYRION_COMMAND_MUTE:
+            snprintf(args, sizeof(args), "\"mixer\",\"muting\",\"%d\"", v ? 1 : 0);
+            break;
+        case LYRION_COMMAND_POWER:
+            snprintf(args, sizeof(args), "\"power\",\"%d\"", v ? 1 : 0);
+            break;
         default:
             return false;
     }
@@ -656,6 +662,7 @@ typedef struct {
     int  amp;              /* ROOM_SWITCH_NONE / _UNKNOWN / 0 / 1 */
     int  pre;
     int  group_mask;       /* rooms playing in sync with this one (bit per room), 0 = none */
+    int  lms_power;        /* the player's own power in Lyrion: -1 unknown / not connected, 0, 1 */
 } room_msg_t;
 
 typedef struct { int idx; uint8_t *pixels; uint32_t w, h, padded; size_t size; } room_cover_msg_t;
@@ -777,7 +784,7 @@ static void rooms_poll_all(void)
     /* A tap waiting stops the pass (the next one finishes it); with Lyrion
      * offline only the switches are read. */
     for (int i = 0; i < lyrion_player_count && rooms_open && !command_pending(); i++) {
-        room_msg_t m = { .idx = i, .state = 0, .volume = -1,
+        room_msg_t m = { .idx = i, .state = 0, .volume = -1, .lms_power = -1,
                          .amp = ROOM_SWITCH_NONE, .pre = ROOM_SWITCH_NONE,
                          .group_mask = group_masks[i] };
         char json[192];
@@ -797,6 +804,9 @@ static void rooms_poll_all(void)
                 const bool playing = cJSON_IsString(mode) && mode->valuestring &&
                                      strcmp(mode->valuestring, "play") == 0;
                 m.state = !on ? 0 : (playing ? 2 : 1);
+                if (!cJSON_IsNumber(conn) || conn->valueint != 0) {
+                    m.lms_power = (!cJSON_IsNumber(power) || power->valueint != 0) ? 1 : 0;
+                }
                 if (cJSON_IsNumber(vol)) m.volume = vol->valueint < 0 ? -vol->valueint : vol->valueint;
 
                 char key[64] = "";

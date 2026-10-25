@@ -813,7 +813,8 @@ static void playback_tick_cb(lv_timer_t *timer)
 }
 
 
-static void volume_mute_sync_locked(int server_volume);   /* 11_transport_controls.c */
+static void volume_mute_sync_locked(bool server_muted);   /* 11_transport_controls.c */
+static void np_lms_power_seen(int room, int power);       /* 11_transport_controls.c */
 
 /* Sync group of the room on screen, from its status (18b_navigation.c). */
 typedef struct { int room; int mask; } np_group_msg_t;
@@ -924,8 +925,11 @@ static void update_lyrion_ui_now(
         (volume_user_touched && lv_tick_elaps(volume_last_user_tick) < 1500);
 
     if (!user_is_busy) {
+        /* Muted in Lyrion: the volume comes as a negative number; the slider
+         * shows the level it will go back to. */
+        const bool server_muted = volume < 0;
         if (volume < 0) {
-            volume = 0;
+            volume = -volume;
         }
 
         if (volume > 100) {
@@ -948,7 +952,7 @@ static void update_lyrion_ui_now(
         }
 
         updating_volume_from_server = false;
-        volume_mute_sync_locked(volume);
+        volume_mute_sync_locked(server_muted);
     }
 
     ui_apply_house_status_locked();
@@ -1439,6 +1443,13 @@ static bool lyrion_get_status(void)
 
         volume =
             volume_json->valueint;
+    }
+
+    /* The player's own power (used by the power button for rooms without
+     * Home Assistant switches). */
+    if (player_index == current_player_index) {
+        cJSON *power_json = cJSON_GetObjectItem(result, "power");
+        np_lms_power_seen(player_index, cJSON_IsNumber(power_json) ? (power_json->valueint != 0) : -1);
     }
 
     /* Sleep timer: "will_sleep_in" (seconds) is only there while one runs. */

@@ -930,7 +930,8 @@ static esp_err_t web_send_page(httpd_req_t *req, const char *notice, bool notice
     /* switches for this location's players */
     web_add(&o, "<section><h2>Power switches</h2><div class='small'>Home Assistant switch names for each "
                 "player here, e.g. <code>switch.office_amplifier</code>. Leave both empty for a player "
-                "without switches. Each room's <b>System power</b> switch (on its Rooms card) turns both "
+                "without switches: its power button then turns the player itself on and off in Lyrion "
+                "(handy for a player plugin that follows the power, e.g. for an AV receiver). Each room's <b>System power</b> switch (on its Rooms card) turns both "
                 "on and off in the order and with the gap set here, so the speakers don't thump; the "
                 "sleep timer and alarms use the same order. With one switch, order and gap don't apply.</div>");
     for (int i = 0; i < lyrion_player_count; i++) {

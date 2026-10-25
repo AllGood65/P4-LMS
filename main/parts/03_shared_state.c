@@ -20,7 +20,9 @@ typedef enum {
     LYRION_COMMAND_SEEK,        /* value: seconds from the start   */
     LYRION_COMMAND_SLEEP,       /* value: seconds until off, 0 = cancel     */
     LYRION_COMMAND_SYNC,        /* value: index of the room that joins this one */
-    LYRION_COMMAND_UNSYNC       /* this room leaves its group                */
+    LYRION_COMMAND_UNSYNC,      /* this room leaves its group                */
+    LYRION_COMMAND_MUTE,        /* value: 1 mute, 0 unmute (Lyrion keeps the volume) */
+    LYRION_COMMAND_POWER        /* value: 1 on, 0 off (the player's own power)       */
 } lyrion_command_type_t;
 
 

@@ -8,6 +8,9 @@ CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
 CONFIG_ESP32P4_REV_MIN_100=y
 CONFIG_SPIRAM=y
+# Secure (https) connections keep their working memory in PSRAM, so the
+# Wi-Fi link to the ESP32-C6 doesn't run short (updates from GitHub)
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_DRAW_BUF_ALIGN=64
 CONFIG_LV_USE_PPA=y

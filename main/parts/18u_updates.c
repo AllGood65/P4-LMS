@@ -15,9 +15,14 @@
  * with an update from the web page, a new version that doesn't start
  * properly is replaced by the previous one by itself (19_web_settings.c).
  *
- * One task does the network work; the screen hears about it through ui_post.
+ * Memory: the board's internal RAM is scarce, and the Wi-Fi link to the
+ * ESP32-C6 needs it, so the update task's stack, the secure connection and
+ * the downloaded file all live in PSRAM.  A task with its stack in PSRAM must
+ * not touch the flash chip (settings or firmware), so the settings are read
+ * and written on the LVGL task (upd_ui_job), and the firmware is written by
+ * a small helper task with an internal stack (upd_writer_task), started only
+ * for that.  The screen hears about everything through ui_post.
  */
-#include "esp_https_ota.h"
 #include "esp_ota_ops.h"
 #include "esp_app_desc.h"
 #include "esp_chip_info.h"
@@ -31,6 +36,7 @@
 #define UPD_EVERY_S         (24 * 3600)              /* then once a day */
 #define UPD_RETRY_S         3600                     /* GitHub not reached: try again in an hour */
 #define UPD_JSON_MAX        (96 * 1024)
+#define UPD_FILE_MAX        (4 * 1024 * 1024)        /* a firmware slot */
 
 #define UPD_CMD_CHECK       BIT0
 #define UPD_CMD_INSTALL     BIT1
@@ -305,7 +311,27 @@ typedef struct {
     char toast[96];         /* a short message, or "" */
     char card[120];         /* the install card's line, or "" to take it away */
     int  percent;
+    char announce[24];      /* a newer version to announce once, or "" */
 } upd_ui_msg_t;
+
+/* A newer version is announced once, remembered across restarts (settings
+ * storage: LVGL task, see the note at the top). */
+static void upd_announce_locked(const char *ver)
+{
+    char seen[24] = "";
+    size_t sz = sizeof(seen);
+    nvs_handle_t nvs;
+    if (nvs_open(PLAYER_NVS_NAMESPACE, NVS_READWRITE, &nvs) != ESP_OK) return;
+    if (nvs_get_str(nvs, UPD_NVS_SEEN, seen, &sz) != ESP_OK) seen[0] = '\0';
+    if (strcmp(seen, ver) != 0) {
+        nvs_set_str(nvs, UPD_NVS_SEEN, ver);
+        nvs_commit(nvs);
+        char t[96];
+        snprintf(t, sizeof(t), "P4-LMS %s is available - see Settings > About", ver);
+        ui_toast_long(t, 8000);
+    }
+    nvs_close(nvs);
+}
 
 static void upd_ui_job(void *arg)
 {
@@ -313,16 +339,23 @@ static void upd_ui_job(void *arg)
     if (m->card[0]) upd_card_show_locked(m->card, m->percent);
     else            upd_card_hide_locked();
     if (m->toast[0]) ui_toast_long(m->toast, 8000);
+    if (m->announce[0]) upd_announce_locked(m->announce);
     upd_about_refresh_locked();
 }
 
-static void upd_ui_post(const char *toast, const char *card, int percent)
+static void upd_ui_post_full(const char *toast, const char *card, int percent, const char *announce)
 {
     upd_ui_msg_t m;
     snprintf(m.toast, sizeof(m.toast), "%s", toast ? toast : "");
     snprintf(m.card, sizeof(m.card), "%s", card ? card : "");
     m.percent = percent;
+    snprintf(m.announce, sizeof(m.announce), "%s", announce ? announce : "");
     ui_post(upd_ui_job, &m, sizeof(m));
+}
+
+static void upd_ui_post(const char *toast, const char *card, int percent)
+{
+    upd_ui_post_full(toast, card, percent, NULL);
 }
 
 /* ------------------------------------------------------------ the check */
@@ -423,23 +456,7 @@ static bool upd_check(void)
     ESP_LOGI(TAG, "Updates: latest release %s, this is %s%s", tag, mine,
              newer ? " - an update is available" : (url[0] ? "" : " (no file for this board)"));
 
-    /* A new version is announced once (remembered across restarts). */
-    char toast[96] = "";
-    if (newer) {
-        char seen[24] = "";
-        size_t sz = sizeof(seen);
-        nvs_handle_t nvs;
-        if (nvs_open(PLAYER_NVS_NAMESPACE, NVS_READWRITE, &nvs) == ESP_OK) {
-            if (nvs_get_str(nvs, UPD_NVS_SEEN, seen, &sz) != ESP_OK) seen[0] = '\0';
-            if (strcmp(seen, tag) != 0) {
-                nvs_set_str(nvs, UPD_NVS_SEEN, tag);
-                nvs_commit(nvs);
-                snprintf(toast, sizeof(toast), "P4-LMS %s is available - see Settings > About", tag);
-            }
-            nvs_close(nvs);
-        }
-    }
-    upd_ui_post(toast, NULL, 0);
+    upd_ui_post_full(NULL, NULL, 0, newer ? tag : NULL);    /* announced once, on the LVGL task */
     return true;
 }
 
@@ -455,6 +472,149 @@ static void upd_install_failed(const char *why)
     upd_ui_post(why, NULL, 0);
 }
 
+/* Firmware writer: a small task with its stack in internal RAM (flash work
+ * isn't allowed from a PSRAM stack).  It writes the downloaded image into the
+ * spare slot, checks it, sets it to start, and reports back. */
+typedef struct {
+    const uint8_t *data;
+    size_t len;
+    char ver[24];
+    TaskHandle_t notify;    /* told the result: 0 = installed */
+} upd_write_job_t;
+
+static upd_write_job_t upd_write_job;
+
+static void upd_writer_task(void *arg)
+{
+    upd_write_job_t *j = (upd_write_job_t *)arg;
+    uint32_t result = 1;
+    const esp_partition_t *part = esp_ota_get_next_update_partition(NULL);
+    esp_ota_handle_t h = 0;
+    if (part != NULL && j->len <= part->size && esp_ota_begin(part, j->len, &h) == ESP_OK) {
+        result = 0;
+        int shown = -1;
+        for (size_t off = 0; off < j->len && result == 0; off += 4096) {
+            const size_t n = (j->len - off) < 4096 ? (j->len - off) : 4096;
+            if (esp_ota_write(h, j->data + off, n) != ESP_OK) { result = 2; break; }
+            const int pct = 80 + (int)((uint64_t)(off + n) * 20 / j->len);     /* 80..100 */
+            if (pct >= shown + 2) {
+                shown = pct;
+                upd_percent = pct;
+                char line[120];
+                snprintf(line, sizeof(line), "Installing %s... %d%%\nThe display restarts when it's done.", j->ver, pct);
+                upd_ui_post(NULL, line, pct);
+            }
+        }
+        if (result == 0) {
+            const esp_err_t err = esp_ota_end(h);
+            if (err == ESP_ERR_OTA_VALIDATE_FAILED) result = 3;
+            else if (err != ESP_OK || esp_ota_set_boot_partition(part) != ESP_OK) result = 4;
+        } else {
+            esp_ota_abort(h);
+        }
+    }
+    xTaskNotify(j->notify, result, eSetValueWithOverwrite);
+    vTaskDelete(NULL);
+}
+
+/* Download the file for this board into PSRAM, with a progress line.  GitHub
+ * answers with a redirect to where the file really is.  Returns the buffer
+ * (heap_caps_free it) or NULL with *why set. */
+static uint8_t *upd_download(const char *url, const char *ver, size_t *out_len, const char **why)
+{
+    *out_len = 0;
+    *why = "Couldn't download the update - check the internet connection";
+    esp_http_client_config_t cfg = {
+        .url = url,
+        .method = HTTP_METHOD_GET,
+        .timeout_ms = 15000,
+        .buffer_size = 4096,
+        .buffer_size_tx = 4096,              /* the redirect's long signed link */
+        .user_agent = "P4-LMS",
+        .crt_bundle_attach = esp_crt_bundle_attach,
+    };
+    esp_http_client_handle_t c = esp_http_client_init(&cfg);
+    if (c == NULL) return NULL;
+
+    int64_t total = -1;
+    int status = 0;
+    bool open = false;
+    for (int hop = 0; hop < 5; hop++) {
+        if (esp_http_client_open(c, 0) != ESP_OK) break;
+        open = true;
+        total = esp_http_client_fetch_headers(c);
+        status = esp_http_client_get_status_code(c);
+        if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
+            esp_http_client_set_redirection(c);
+            esp_http_client_close(c);
+            open = false;
+            continue;
+        }
+        break;
+    }
+    uint8_t *buf = NULL;
+    if (open && status == 200 && total > 65536 && total <= UPD_FILE_MAX) {
+        buf = heap_caps_malloc((size_t)total, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (buf == NULL) *why = "Not enough memory for the download";
+    } else if (open && status == 200) {
+        *why = "The download is the wrong size for P4-LMS firmware";
+    }
+    size_t len = 0;
+    if (buf != NULL) {
+        int shown = -1;
+        while (len < (size_t)total) {
+            const int n = esp_http_client_read(c, (char *)buf + len, (int)((size_t)total - len));
+            if (n <= 0) break;
+            len += (size_t)n;
+            const int pct = (int)((uint64_t)len * 80 / (uint64_t)total);       /* 0..80 */
+            if (pct >= shown + 2) {
+                shown = pct;
+                upd_percent = pct;
+                char line[120];
+                snprintf(line, sizeof(line), "Downloading %s... %d%%", ver, pct);
+                upd_ui_post(NULL, line, pct);
+            }
+        }
+        if (len != (size_t)total) {
+            *why = "The download stopped part-way - the current version is untouched";
+            heap_caps_free(buf);
+            buf = NULL;
+        }
+    }
+    if (open) esp_http_client_close(c);
+    esp_http_client_cleanup(c);
+    if (buf == NULL) {
+        ESP_LOGW(TAG, "Updates: download failed (HTTP %d, %lld bytes expected, %u read)",
+                 status, (long long)total, (unsigned)len);
+        return NULL;
+    }
+    *out_len = len;
+    return buf;
+}
+
+/* Is this a P4-LMS firmware image for this board?  NULL if so, else why not.
+ * (The same checks as an update from the web page.) */
+static const char *upd_image_problem(const uint8_t *b, size_t len)
+{
+    if (len < 128 || b[0] != 0xE9) return "The download isn't a firmware file - nothing was changed";
+    const uint32_t desc_magic = (uint32_t)b[32] | ((uint32_t)b[33] << 8) |
+                                ((uint32_t)b[34] << 16) | ((uint32_t)b[35] << 24);
+    char project[33];
+    memcpy(project, b + 80, 32);
+    project[32] = '\0';
+    if (desc_magic != 0xABCD5432U || strcmp(project, esp_app_get_description()->project_name) != 0) {
+        return "The download isn't a P4-LMS update - nothing was changed";
+    }
+    const unsigned min_rev = (unsigned)b[15] | ((unsigned)b[16] << 8);
+    const unsigned max_rev = (unsigned)b[17] | ((unsigned)b[18] << 8);
+    esp_chip_info_t ci;
+    esp_chip_info(&ci);
+    if (ci.revision < min_rev || (max_rev != 0 && max_rev != 0xFFFF && ci.revision > max_rev)) {
+        return "The download was built for the other kind of board - nothing was changed";
+    }
+    return NULL;
+}
+
 static void upd_install(void)
 {
     char url[sizeof(upd_url)];
@@ -464,10 +624,6 @@ static void upd_install(void)
     snprintf(ver, sizeof(ver), "%s", upd_latest);
     if (upd_lock != NULL) xSemaphoreGive(upd_lock);
     if (url[0] == '\0') { upd_install_failed("No update to install - look for updates first"); return; }
-    if (esp_ota_get_next_update_partition(NULL) == NULL) {
-        upd_install_failed("No spare firmware slot - flash the full firmware over USB once");
-        return;
-    }
     if (!ota_claim()) { upd_install_failed("An update is already running"); return; }
     if (upd_lock != NULL) xSemaphoreTake(upd_lock, portMAX_DELAY);
     upd_state = UPD_INSTALLING;
@@ -480,57 +636,28 @@ static void upd_install(void)
     upd_ui_post(NULL, line, 0);
     ESP_LOGI(TAG, "Updates: installing %s from %s", ver, url);
 
-    /* GitHub sends the file from another address (a redirect with a long
-     * signed link), hence the roomy buffers. */
-    esp_http_client_config_t http = {
-        .url = url,
-        .timeout_ms = 15000,
-        .buffer_size = 4096,
-        .buffer_size_tx = 4096,
-        .keep_alive_enable = true,
-        .crt_bundle_attach = esp_crt_bundle_attach,
-        .user_agent = "P4-LMS",
-    };
-    esp_https_ota_config_t oc = { .http_config = &http };
-    esp_https_ota_handle_t h = NULL;
+    size_t len = 0;
     const char *fail = NULL;
+    uint8_t *img = upd_download(url, ver, &len, &fail);
+    if (img != NULL) fail = upd_image_problem(img, len);
 
-    if (esp_https_ota_begin(&oc, &h) != ESP_OK || h == NULL) {
-        fail = "Couldn't download the update - check the internet connection";
-        h = NULL;
-    }
-    if (fail == NULL) {
-        esp_app_desc_t d;
-        if (esp_https_ota_get_img_desc(h, &d) != ESP_OK ||
-            strcmp(d.project_name, esp_app_get_description()->project_name) != 0) {
-            fail = "The download isn't a P4-LMS update - nothing was changed";
+    if (img != NULL && fail == NULL) {
+        /* write it with the helper task, and wait for its answer */
+        upd_write_job.data = img;
+        upd_write_job.len = len;
+        snprintf(upd_write_job.ver, sizeof(upd_write_job.ver), "%s", ver);
+        upd_write_job.notify = xTaskGetCurrentTaskHandle();
+        xTaskNotifyStateClear(NULL);
+        if (xTaskCreate(upd_writer_task, "upd_write", 4096, &upd_write_job, 3, NULL) != pdPASS) {
+            fail = "Not enough memory to install - nothing was changed";
+        } else {
+            uint32_t result = 1;
+            xTaskNotifyWait(0, UINT32_MAX, &result, portMAX_DELAY);
+            if (result == 3)      fail = "The update file is damaged - the current version is untouched";
+            else if (result != 0) fail = "Couldn't finish installing - the current version is untouched";
         }
     }
-    if (fail == NULL) {
-        const int total = esp_https_ota_get_image_size(h);
-        int shown = -1;
-        esp_err_t err;
-        while ((err = esp_https_ota_perform(h)) == ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
-            const int got = esp_https_ota_get_image_len_read(h);
-            const int pct = total > 0 ? (int)((int64_t)got * 100 / total) : 0;
-            if (pct >= shown + 2) {
-                shown = pct;
-                upd_percent = pct;
-                snprintf(line, sizeof(line), "Installing %s... %d%%\nThe display restarts when it's done.", ver, pct);
-                upd_ui_post(NULL, line, pct);
-            }
-        }
-        if (err != ESP_OK || !esp_https_ota_is_complete_data_received(h)) {
-            fail = "The download stopped part-way - the current version is untouched";
-        }
-    }
-    if (fail == NULL) {
-        const esp_err_t err = esp_https_ota_finish(h);      /* checks the image, sets it to start */
-        h = NULL;
-        if (err == ESP_ERR_OTA_VALIDATE_FAILED) fail = "The update file is damaged - the current version is untouched";
-        else if (err != ESP_OK)                 fail = "Couldn't finish installing - the current version is untouched";
-    }
-    if (h != NULL) esp_https_ota_abort(h);
+    if (img != NULL) heap_caps_free(img);
     ota_busy = false;
 
     if (fail != NULL) {
@@ -574,8 +701,10 @@ static void upd_start(void)
 {
     if (upd_task_handle != NULL) return;
     upd_lock = xSemaphoreCreateMutex();
-    /* TLS and the download need a roomy stack */
-    if (xTaskCreate(upd_task, "updates", 10240, NULL, 3, &upd_task_handle) != pdPASS) {
+    /* TLS needs a roomy stack: in PSRAM, so it costs no internal RAM (see the
+     * note at the top: this task never touches the flash chip itself) */
+    if (xTaskCreatePinnedToCoreWithCaps(upd_task, "updates", 12288, NULL, 3, &upd_task_handle,
+                                        tskNO_AFFINITY, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
         upd_task_handle = NULL;
         ESP_LOGW(TAG, "Updates: task could not start");
     }

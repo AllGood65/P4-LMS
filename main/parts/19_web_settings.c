@@ -35,6 +35,7 @@
 #define WEB_NVS_NP_DIM   "np_dim"
 #define WEB_NVS_SS_NET   "ss_net"
 #define WEB_NVS_ANIM     "anim"
+#define WEB_NVS_RG       "show_rg"
 #define WEB_NVS_TZ       "tz"
 #define WEB_NVS_CLK_FONT "clk_font"
 #define WEB_NVS_CLK_SIZE "clk_size"
@@ -114,6 +115,7 @@ static void web_settings_load(void)
     if (nvs_get_u8(nvs, WEB_NVS_NP_DIM, &v) == ESP_OK && v <= 120) np_dim_min = v;
     if (nvs_get_u8(nvs, WEB_NVS_SS_NET, &v) == ESP_OK && v <= 24) ss_net_hours = v;
     if (nvs_get_u8(nvs, WEB_NVS_ANIM, &v) == ESP_OK) ui_anim_on = (v != 0);
+    if (nvs_get_u8(nvs, WEB_NVS_RG, &v) == ESP_OK) ui_show_rg = (v != 0);
     if (nvs_get_u8(nvs, WEB_NVS_TZ, &v) == ESP_OK && v < TZ_CHOICES) { tz_index = v; time_apply_timezone(); }
     if (nvs_get_u8(nvs, WEB_NVS_CLK_FONT, &v) == ESP_OK && v < SS_CLK_FONTS) ss_clk_font = v;
     if (nvs_get_u8(nvs, WEB_NVS_CLK_SIZE, &v) == ESP_OK && v < SS_CLK_SIZES) ss_clk_size = v;
@@ -145,6 +147,7 @@ static bool web_settings_save(void)
               nvs_set_u8(nvs, WEB_NVS_NP_DIM, (uint8_t)np_dim_min) == ESP_OK &&
               nvs_set_u8(nvs, WEB_NVS_SS_NET, (uint8_t)ss_net_hours) == ESP_OK &&
               nvs_set_u8(nvs, WEB_NVS_ANIM, ui_anim_on ? 1 : 0) == ESP_OK &&
+              nvs_set_u8(nvs, WEB_NVS_RG, ui_show_rg ? 1 : 0) == ESP_OK &&
               nvs_set_u8(nvs, WEB_NVS_TZ, (uint8_t)tz_index) == ESP_OK &&
               nvs_set_u8(nvs, WEB_NVS_CLK_FONT, (uint8_t)ss_clk_font) == ESP_OK &&
               nvs_set_u8(nvs, WEB_NVS_CLK_SIZE, (uint8_t)ss_clk_size) == ESP_OK &&
@@ -756,8 +759,12 @@ static esp_err_t web_send_page(httpd_req_t *req, const char *notice, bool notice
     web_add_escaped(&o, ui_theme->name);
     web_add(&o, " <span class='small'>(choose on the display: Settings &rsaquo; Theme)</span></div></div>"
                 "<div><label>Song-change fade</label><select name='anim'>"
-                "<option value='1'%s>On</option><option value='0'%s>Off</option></select></div></div></section>",
+                "<option value='1'%s>On</option><option value='0'%s>Off</option></select></div>",
             ui_anim_on ? " selected" : "", ui_anim_on ? "" : " selected");
+    web_add(&o, "<div><label>ReplayGain on the format line</label><select name='show_rg'>"
+                "<option value='1'%s>Show (e.g. RG -2.34 dB)</option><option value='0'%s>Hide</option></select>"
+                "<div class='small'>Only for songs whose files have ReplayGain.</div></div></div></section>",
+            ui_show_rg ? " selected" : "", ui_show_rg ? "" : " selected");
 
     /* Visualizer */
     web_add(&o, "<section><h2>Visualizer</h2><div class='row'><div><label>Style</label><div>%s "
@@ -1175,6 +1182,7 @@ static esp_err_t web_post_save(httpd_req_t *req)
     web_field(body, "np_dim", v, sizeof(v)); if (v[0]) np_dim_min = (uint32_t)web_clamp_int(v, 0, 120, (int)np_dim_min);
     web_field(body, "ss_net", v, sizeof(v)); if (v[0]) ss_net_hours = (uint32_t)web_clamp_int(v, 0, 24, (int)ss_net_hours);
     web_field(body, "anim", v, sizeof(v));   ui_anim_on     = web_clamp_int(v, 0, 1, ui_anim_on ? 1 : 0) != 0;
+    web_field(body, "show_rg", v, sizeof(v)); ui_show_rg    = web_clamp_int(v, 0, 1, ui_show_rg ? 1 : 0) != 0;
     web_field(body, "mic_gain", v, sizeof(v));
     if (v[0]) { mic_gain_step = web_clamp_int(v, 0, 3, mic_gain_step); mic_gain_save(); }
     web_field(body, "alarm_amp", v, sizeof(v));

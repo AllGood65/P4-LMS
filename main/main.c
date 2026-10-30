@@ -108,6 +108,7 @@ static void *cjson_psram_malloc(size_t n)
 #include "parts/18e_screensavers.c"
 #include "parts/18f_playlists.c"
 #include "qr/p4qr.c"                /* QR code maker (Project Nayuki, MIT) */
+#include "parts/18u_updates.c"
 #include "parts/18g_about.c"
 #include "parts/19_web_settings.c"
 

@@ -61,7 +61,9 @@ On its first start the display walks you through the first two steps by itself: 
 
 ## Updating
 
-Later versions can be installed from the web settings page: **Firmware update** › choose `P4-LMS.bin` from the Releases page (or `P4-LMS-chip-v3.bin` for a [chip v3 board](#newer-boards-chip-v3)) › **Install**. Use these update files, not the larger `P4-LMS-vX.Y` files, which are for a first install over USB. If a new version fails to start properly, the display goes back to the previous one by itself.
+From version 2.8 the display looks for new versions on GitHub once a day. When there is one, it says so, and **Settings › About › INSTALL** (or **Install from GitHub** on the web settings page) downloads the right file for the board and installs it. Nothing installs by itself.
+
+Updates can also be installed by hand from the web settings page: **Firmware update** › choose `P4-LMS.bin` from the Releases page (or `P4-LMS-chip-v3.bin` for a [chip v3 board](#newer-boards-chip-v3)) › **Install**. Use these update files, not the larger `P4-LMS-vX.Y` files, which are for a first install over USB. If a new version fails to start properly, the display goes back to the previous one by itself.
 
 ## Android app
 

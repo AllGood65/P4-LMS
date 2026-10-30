@@ -333,8 +333,8 @@ static const char web_update_section[] =
     "<section style='margin-top:14px'><h2>Firmware update</h2>"
     /* Two kinds of user: most download the update file from GitHub Releases,
      * a few build it themselves - so name the file for both. */
-    "<div class='small'>Choose the update file. From the GitHub Releases page: "
-    "<b>P4-LMS-update-vX.Y.bin</b> (or <b>P4-LMS-update-vX.Y-chip-v3.bin</b> for chip v3 boards). "
+    "<div class='small'>Or install a file yourself. From the GitHub Releases page: "
+    "<b>P4-LMS.bin</b> (or <b>P4-LMS-chip-v3.bin</b> for chip v3 boards). "
     "If you build it yourself: <b>build\\P4-LMS.bin</b> (<b>build-v3\\P4-LMS.bin</b> for chip v3). "
     "The display checks the file, installs it and restarts. If the new version fails to start "
     "properly it goes back to this one by itself.</div>"
@@ -376,7 +376,7 @@ static const char web_backup_section[] =
     "x.onerror=function(){m.textContent='The upload was interrupted - nothing was changed.';};"
     "m.textContent='Sending...';x.send(f);}</script>";
 
-static volatile bool ota_busy = false;
+/* ota_busy and ota_claim(): 18u_updates.c (shared with updates from GitHub) */
 
 static esp_err_t web_update_fail(httpd_req_t *req, const char *msg)
 {
@@ -391,8 +391,6 @@ static esp_err_t web_update_fail(httpd_req_t *req, const char *msg)
  * for start-up once the whole image has arrived and passed ESP-IDF's checks. */
 static esp_err_t web_post_update(httpd_req_t *req)
 {
-    if (ota_busy) return web_update_fail(req, "An update is already running.");
-
     const esp_partition_t *part = esp_ota_get_next_update_partition(NULL);
     if (part == NULL) {
         return web_update_fail(req, "This display has no spare firmware slot yet - flash the full "
@@ -403,10 +401,10 @@ static esp_err_t web_post_update(httpd_req_t *req)
         return web_update_fail(req, "That file is the wrong size for P4-LMS firmware.");
     }
 
+    if (!ota_claim()) return web_update_fail(req, "An update is already running.");
     uint8_t *buf = heap_caps_malloc(4096, MALLOC_CAP_8BIT);
-    if (buf == NULL) return web_update_fail(req, "Not enough memory - try again.");
+    if (buf == NULL) { ota_busy = false; return web_update_fail(req, "Not enough memory - try again."); }
 
-    ota_busy = true;
     esp_ota_handle_t h = 0;
     bool begun = false;
     int received = 0, have = 0;
@@ -455,8 +453,8 @@ static esp_err_t web_post_update(httpd_req_t *req)
                     snprintf(rev_msg, sizeof(rev_msg),
                              "That file was built for the other board: this display has chip v%u.%u. "
                              "Use %s - nothing was changed.", chip / 100, chip % 100,
-                             chip >= 300 ? "the chip-v3 update file (P4-LMS-update-vX.Y-chip-v3.bin, or build-v3\\P4-LMS.bin)"
-                                         : "the normal update file (P4-LMS-update-vX.Y.bin, or build\\P4-LMS.bin)");
+                             chip >= 300 ? "the chip-v3 update file (P4-LMS-chip-v3.bin, or build-v3\\P4-LMS.bin)"
+                                         : "the normal update file (P4-LMS.bin, or build\\P4-LMS.bin)");
                     fail = rev_msg;
                     break;
                 }
@@ -1018,6 +1016,25 @@ static esp_err_t web_send_page(httpd_req_t *req, const char *notice, bool notice
     web_add(&o, "<form method='post' action='/restart' style='margin-top:14px' "
                 "onsubmit=\"return confirm('Restart the display?')\">"
                 "<button class='plain' type='submit'>Restart display</button></form>");
+    {
+        /* Updates from GitHub (18u_updates.c): status and buttons */
+        char line[200];
+        bool can_install = false, busy = false;
+        upd_web_section_text(line, sizeof(line), &can_install, &busy);
+        web_add(&o, "<section id='gh' style='margin-top:14px'><h2>Updates</h2><div>");
+        web_add_escaped(&o, line);
+        web_add(&o, "</div><form method='post' action='/github' style='margin-top:10px'>");
+        if (can_install) {
+            web_add(&o, "<button name='act' value='install' type='submit' "
+                        "onclick=\"return confirm('Download and install the update from GitHub? "
+                        "The display restarts when it is done.')\">Install from GitHub</button> ");
+        }
+        if (!busy) web_add(&o, "<button class='plain' name='act' value='check' type='submit'>Check now</button>");
+        web_add(&o, "</form>");
+        /* while it works, this page looks again every few seconds */
+        if (busy) web_add(&o, "<script>setTimeout(function(){location.replace('/?u='+Date.now()+'#gh');},4000);</script>");
+        web_add(&o, "</section>");
+    }
     web_add(&o, "%s", web_update_section);
     web_add(&o, "%s", web_backup_section);
     web_add(&o, "<p class='small'>This page has no password - anyone on your network can open it. "
@@ -1577,6 +1594,21 @@ static esp_err_t web_post_restore(httpd_req_t *req)
     return ESP_OK;
 }
 
+/* Updates from GitHub: "Check now" and "Install from GitHub" (18u_updates.c
+ * does the work in its own task; the page shows how it goes). */
+static esp_err_t web_post_github(httpd_req_t *req)
+{
+    char body[48] = "";
+    const int n = httpd_req_recv(req, body, sizeof(body) - 1);
+    body[n > 0 ? n : 0] = '\0';
+    if (strstr(body, "act=install") != NULL) upd_request(UPD_CMD_INSTALL);
+    else                                      upd_request(UPD_CMD_CHECK);
+    vTaskDelay(pdMS_TO_TICKS(300));              /* so the page already shows it started */
+    httpd_resp_set_status(req, "303 See Other");
+    httpd_resp_set_hdr(req, "Location", "/#gh");
+    return httpd_resp_send(req, NULL, 0);
+}
+
 static esp_err_t web_post_restart(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "text/html");
@@ -1610,6 +1642,9 @@ static void web_settings_start(void)
     static const httpd_uri_t restore = { .uri = "/restore", .method = HTTP_POST, .handler = web_post_restore };
     httpd_register_uri_handler(server, &backup);
     httpd_register_uri_handler(server, &restore);
+    static const httpd_uri_t github  = { .uri = "/github",  .method = HTTP_POST, .handler = web_post_github };
+    httpd_register_uri_handler(server, &github);
+    upd_start();                             /* looks for updates on GitHub once a day */
 
     const esp_timer_create_args_t targs = { .callback = ota_confirm_cb, .name = "ota_confirm" };
     if (esp_timer_create(&targs, &ota_confirm_timer) == ESP_OK) {

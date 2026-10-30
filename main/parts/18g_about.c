@@ -25,6 +25,7 @@ static lv_image_dsc_t about_qr_dsc;
 static void about_delete_event_cb(lv_event_t *e)
 {
     (void)e;
+    upd_about_forget();                        /* its update line and button go too */
     if (about_qr_pixels != NULL) {
         heap_caps_free(about_qr_pixels);
         about_qr_pixels = NULL;
@@ -134,6 +135,7 @@ static void about_show(void)
     }
     snprintf(line, sizeof(line), "Firmware %s", esp_app_get_description()->version);
     ui_text(about_overlay, line, &p4_font_16, UI_TEXT_DIM, 30, 190, 0);
+    upd_about_add(about_overlay, 214);          /* updates from GitHub (18u_updates.c) */
 
     /* Tips */
     ui_text(about_overlay, "TIPS", &p4_font_18, UI_ACCENT, 30, 240, 0);

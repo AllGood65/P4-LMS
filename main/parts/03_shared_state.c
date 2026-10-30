@@ -272,6 +272,9 @@ static void ui_set_label(lv_obj_t *label, const char *text)
  * Kept small on purpose: the panel is drawn in software, so short slides and
  * fades of small areas only. */
 static volatile bool ui_anim_on = true;
+/* Show the ReplayGain Lyrion applies to the song (e.g. "RG -2.34 dB") on the
+ * format line, when it applies one (web page setting, off by default). */
+static volatile bool ui_show_rg = false;
 
 static void ui_anim_translate_y_cb(void *obj, int32_t v)
 {

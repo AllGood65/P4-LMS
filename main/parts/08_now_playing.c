@@ -1052,22 +1052,45 @@ static void update_lyrion_offline_ui(void)
 /* ------------------------------------------------------------------------
  * Audio-format badge: "FLAC  |  44.1 kHz  |  16-bit  |  987kbps VBR"
  * ------------------------------------------------------------------------ */
+/* With the ReplayGain shown the line is longer, so the parts sit closer. */
+static bool format_compact = false;
+
 static void format_append(char *out, size_t out_size, const char *part)
 {
     if (part == NULL || part[0] == '\0') return;
     size_t len = strlen(out);
     if (len > 0) {
-        snprintf(out + len, out_size - len, "  |  %s", part);
+        snprintf(out + len, out_size - len, format_compact ? " | %s" : "  |  %s", part);
     } else {
         snprintf(out, out_size, "%s", part);
     }
 }
 
-static void format_build_text(const cJSON *track, char *out, size_t out_size, bool *lossless)
+/* The ReplayGain Lyrion is applying to this song, in hundredths of a dB:
+ * status's own "replay_gain" (track, album or smart, as the player is set).
+ * Not there when the player's ReplayGain is off or the file has none. */
+static bool format_replay_gain(const cJSON *result, int *centi_db)
+{
+    const cJSON *j = result != NULL ? cJSON_GetObjectItem(result, "replay_gain") : NULL;
+    double g = 0.0;
+    if (cJSON_IsNumber(j)) g = j->valuedouble;
+    else if (cJSON_IsString(j) && j->valuestring != NULL && j->valuestring[0] != '\0') g = atof(j->valuestring);
+    else return false;
+    if (g > 60.0) g = 60.0;
+    if (g < -60.0) g = -60.0;
+    *centi_db = (int)lround(g * 100.0);
+    return true;
+}
+
+static void format_build_text(const cJSON *track, const cJSON *result, char *out, size_t out_size, bool *lossless)
 {
     out[0] = '\0';
     *lossless = false;
+    format_compact = false;
     if (track == NULL) return;
+    int rg = 0;
+    const bool show_rg = ui_show_rg && format_replay_gain(result, &rg);
+    format_compact = show_rg;
 
     /* Container / codec: first word of the type, e.g. "flc" or "MP3 Radio". */
     char tok[12] = "";
@@ -1142,10 +1165,20 @@ static void format_build_text(const cJSON *track, char *out, size_t out_size, bo
         format_append(out, out_size, part);
     }
 
+    /* The bit rate of a lossless file says little; with the ReplayGain
+     * shown it makes room for it. */
     const cJSON *br_j = cJSON_GetObjectItem(track, "bitrate");
-    if (cJSON_IsString(br_j) && br_j->valuestring != NULL && br_j->valuestring[0] != '\0') {
+    if (cJSON_IsString(br_j) && br_j->valuestring != NULL && br_j->valuestring[0] != '\0' &&
+        !(show_rg && *lossless)) {
         char part[20];
         snprintf(part, sizeof(part), "%.18s", br_j->valuestring);
+        format_append(out, out_size, part);
+    }
+
+    if (show_rg) {
+        const int a = rg < 0 ? -rg : rg;
+        char part[40];
+        snprintf(part, sizeof(part), "RG %s%d.%02d dB", rg < 0 ? "-" : "+", a / 100, a % 100);
         format_append(out, out_size, part);
     }
 }
@@ -1624,7 +1657,7 @@ static bool lyrion_get_status(void)
                     album_json->valuestring;
             }
 
-            format_build_text(track, format_text, sizeof(format_text), &format_lossless);
+            format_build_text(track, result, format_text, sizeof(format_text), &format_lossless);
             /* For the FAV button: the playing URL and a name to save it under
              * (the station name for radio, else the song title). */
             {

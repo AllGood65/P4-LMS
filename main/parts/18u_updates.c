@@ -136,6 +136,7 @@ static void upd_snapshot(upd_snapshot_t *s)
 static lv_obj_t *upd_about_label = NULL;
 static lv_obj_t *upd_about_btn = NULL;
 static bool upd_install_armed = false;           /* INSTALL tapped once: tap again to go */
+static volatile int64_t upd_checked_us = 0;      /* when GitHub last answered (esp_timer) */
 static lv_timer_t *upd_arm_timer = NULL;
 static lv_obj_t *upd_card = NULL;
 static lv_obj_t *upd_card_label = NULL;
@@ -237,6 +238,12 @@ static void upd_about_add(lv_obj_t *panel, int32_t y)
     lv_obj_set_pos(upd_about_btn, 400, y - 30);
     lv_obj_add_event_cb(upd_about_btn, upd_about_btn_cb, LV_EVENT_CLICKED, NULL);
     upd_about_refresh_locked();
+    /* The answer shown may be hours old (a newer release since): opening
+     * About looks again if the last look was over 10 minutes ago. */
+    if ((upd_state == UPD_AVAILABLE || upd_state == UPD_LATEST) &&
+        esp_timer_get_time() - upd_checked_us > 10LL * 60 * 1000000) {
+        upd_request(UPD_CMD_CHECK);
+    }
 }
 
 /* The About page is going away (18g_about.c): forget its pieces. */
@@ -452,6 +459,7 @@ static bool upd_check(void)
         upd_latest[0] = upd_url[0] = '\0';
         upd_state = UPD_LATEST;
     }
+    upd_checked_us = esp_timer_get_time();
     if (upd_lock != NULL) xSemaphoreGive(upd_lock);
     ESP_LOGI(TAG, "Updates: latest release %s, this is %s%s", tag, mine,
              newer ? " - an update is available" : (url[0] ? "" : " (no file for this board)"));
@@ -687,7 +695,13 @@ static void upd_task(void *arg)
             continue;
         }
         if (cmd & UPD_CMD_INSTALL) {
-            upd_install();
+            /* Look once more first, so it's the newest release that goes
+             * in (not one found hours ago and since replaced). */
+            if (!upd_check()) {
+                upd_install_failed("Couldn't reach GitHub - nothing was changed");
+            } else if (upd_state == UPD_AVAILABLE) {
+                upd_install();
+            }                                   /* else: already the latest - shown */
             wait = pdMS_TO_TICKS(UPD_EVERY_S * 1000ULL);
             continue;
         }

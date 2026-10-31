@@ -101,10 +101,21 @@ static void source_idle_timer_cb(lv_timer_t *timer)
     }
 }
 
+/* Set when the Library / Queue tab is tapped while another panel (Rooms,
+ * Settings) is up: that panel stays until the list is ready, then closes
+ * here, so Now Playing doesn't flash up while the list loads. */
+static bool nav_close_others_on_show = false;
+static volatile int64_t nav_tap_us = 0;      /* Library/Queue tab tapped (timing log) */
+static void nav_hide_other_panels(void);   /* 18b */
+
 static void source_show(void)
 {
     if (source_overlay != NULL) {
         ui_show_panel(source_overlay);
+    }
+    if (nav_close_others_on_show) {
+        nav_close_others_on_show = false;
+        nav_hide_other_panels();
     }
 }
 
@@ -234,6 +245,8 @@ static void source_remove_event_cb(lv_event_t *e)
  * control strip and the "NOW PLAYING" tag. */
 #define QUEUE_ROW_ICON 1
 #define QUEUE_ROW_TAG  4
+static void queue_row_fill_strip(int i);   /* below */
+static void pl_row_fill_strip(int i);      /* 18f_playlists.c */
 
 /* Show the controls on the selected row and "..." on the others (row i,
  * if it is on screen). */
@@ -257,6 +270,12 @@ static void queue_row_apply_one(int i)
             else                 lv_obj_add_flag(tag, LV_OBJ_FLAG_HIDDEN);
         }
         if (sel) {
+            /* the strip's buttons are only made when it first opens: most
+             * rows never need them, and the list opens much faster */
+            if (lv_obj_get_child_count(queue_row_strip[i]) == 0) {
+                if (source_current_mode == SOURCE_PLAYLIST_TRACKS) pl_row_fill_strip(i);
+                else                                               queue_row_fill_strip(i);
+            }
             lv_obj_add_flag(queue_row_more[i], LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(queue_row_strip[i], LV_OBJ_FLAG_HIDDEN);
         } else {
@@ -428,8 +447,6 @@ static void queue_fav_event_cb(lv_event_t *e)
 /* Add "..." and the (hidden) move strip to queue row i. */
 static void queue_row_add_controls(lv_obj_t *row, int i)
 {
-    const int idx = source_items[i].id;
-
     lv_obj_t *more = queue_ctrl_button(row, LV_SYMBOL_BARS, 0, 40, UI_BUTTON, queue_more_event_cb, i);
     lv_obj_align(more, LV_ALIGN_RIGHT_MID, -5, 0);
     lv_obj_set_style_border_width(more, 1, 0);
@@ -445,8 +462,15 @@ static void queue_row_add_controls(lv_obj_t *row, int i)
     lv_obj_clear_flag(strip, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(strip, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(strip, LV_OBJ_FLAG_HIDDEN);
-    queue_row_strip[i] = strip;
+    queue_row_strip[i] = strip;               /* its buttons: queue_row_fill_strip */
+}
 
+/* The move controls on queue row i, made when "..." first opens them. */
+static void queue_row_fill_strip(int i)
+{
+    lv_obj_t *strip = queue_row_strip[i];
+    if (strip == NULL) return;
+    const int idx = source_items[i].id;
     lv_obj_t *up   = queue_ctrl_button(strip, LV_SYMBOL_UP,   0,   42, UI_ACCENT, queue_move_event_cb, (i << 2) | QUEUE_MOVE_UP);
     lv_obj_t *down = queue_ctrl_button(strip, LV_SYMBOL_DOWN, 50,  42, UI_ACCENT, queue_move_event_cb, (i << 2) | QUEUE_MOVE_DOWN);
     lv_obj_t *next = queue_ctrl_button(strip, "NEXT",         100, 58, UI_ACCENT, queue_move_event_cb, (i << 2) | QUEUE_MOVE_NEXT);

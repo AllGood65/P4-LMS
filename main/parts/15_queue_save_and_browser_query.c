@@ -1098,6 +1098,10 @@ static bool source_radio_action_to_request(const char *action_json,
             cJSON_AddItemToArray(cmd_array, cJSON_CreateString(tagged));
         }
     }
+    /* Play just the song tapped: with Lyrion's "play other songs" setting
+     * on, an app's song (a YouTube result, say) otherwise brings the whole
+     * list it came from into the queue.  Lyrion ignores it elsewhere. */
+    cJSON_AddItemToArray(cmd_array, cJSON_CreateString("touchToPlaySingle:1"));
 
     cJSON *rpc = cJSON_CreateObject();
     cJSON_AddNumberToObject(rpc, "id", 1);

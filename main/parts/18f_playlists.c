@@ -210,7 +210,6 @@ static void pl_queue_event_cb(lv_event_t *e)
 /* "..." and the (hidden) control strip on playlist song row i:  ^  v  +  x */
 static void pl_row_add_controls(lv_obj_t *row, int i)
 {
-    const int idx = source_items[i].id;
     lv_obj_t *more = queue_ctrl_button(row, LV_SYMBOL_BARS, 0, 40, UI_BUTTON, queue_more_event_cb, i);
     lv_obj_align(more, LV_ALIGN_RIGHT_MID, -5, 0);
     lv_obj_set_style_border_width(more, 1, 0);
@@ -225,8 +224,15 @@ static void pl_row_add_controls(lv_obj_t *row, int i)
     lv_obj_clear_flag(strip, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(strip, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(strip, LV_OBJ_FLAG_HIDDEN);
-    queue_row_strip[i] = strip;
+    queue_row_strip[i] = strip;               /* its buttons: pl_row_fill_strip */
+}
 
+/* The controls on playlist row i, made when "..." first opens them. */
+static void pl_row_fill_strip(int i)
+{
+    lv_obj_t *strip = queue_row_strip[i];
+    if (strip == NULL) return;
+    const int idx = source_items[i].id;
     lv_obj_t *up   = queue_ctrl_button(strip, LV_SYMBOL_UP,   0,   42, UI_ACCENT, pl_move_event_cb, (i << 2) | PL_MOVE_UP);
     lv_obj_t *down = queue_ctrl_button(strip, LV_SYMBOL_DOWN, 50,  42, UI_ACCENT, pl_move_event_cb, (i << 2) | PL_MOVE_DOWN);
     lv_obj_t *add  = queue_ctrl_button(strip, LV_SYMBOL_PLUS, 100, 42, UI_ACCENT, pl_queue_event_cb, i);

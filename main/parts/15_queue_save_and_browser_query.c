@@ -1383,13 +1383,16 @@ static void source_show_error_job(void *arg)
 }
 
 typedef struct { const char *title; int art_key; bool set_art_key; } source_render_ctx_t;
+static int64_t source_build_us = 0;          /* the last list build (timing log) */
 static void source_render_job(void *arg)
 {
+    const int64_t t0 = esp_timer_get_time();
     const source_render_ctx_t *c = (const source_render_ctx_t *)arg;
     if (c->set_art_key) source_art_key_wanted = c->art_key;
     source_set_title(c->title);
     source_render_items();
     source_show();
+    source_build_us = esp_timer_get_time() - t0;
 }
 
 /* Status line of the save-queue panel. */
@@ -1876,6 +1879,7 @@ static void source_query_and_render(source_request_t request)
          * with the artist tag: all of it (up to SOURCE_ITEM_CAP songs), a
          * couple of hundred at a time.  The view scrolls; only the rows on
          * screen are drawn. */
+        const int64_t q_t0 = esp_timer_get_time();
         int total = 0, current = -1;
         bool first_is_live = false;        /* a stream with no length: live radio */
         char station[SOURCE_TEXT_MAX] = "";
@@ -1954,6 +1958,7 @@ static void source_query_and_render(source_request_t request)
         if (source_item_count == before || source_item_count >= total) break;   /* all of it */
         }
         heap_caps_free(response);
+        const int64_t q_t1 = esp_timer_get_time();
         request.offset = 0;
         source_has_next = false;              /* the whole queue (up to the cap) is here */
         source_queue_total = total;
@@ -1972,6 +1977,14 @@ static void source_query_and_render(source_request_t request)
             else snprintf(title, sizeof(title), total == 1 ? "QUEUE  (1 SONG)" : "QUEUE  (%d SONGS)", total);
             source_render_ctx_t ctx = { .title = title };
             ui_call(source_render_job, &ctx);
+        }
+        {
+            const int64_t q_t2 = esp_timer_get_time();
+            ESP_LOGI(TAG, "Queue: %d songs - waited %d ms to start, Lyrion %d ms, drawing %d ms (building %d ms)",
+                     total, nav_tap_us ? (int)((q_t0 - nav_tap_us) / 1000) : -1,
+                     (int)((q_t1 - q_t0) / 1000), (int)((q_t2 - q_t1) / 1000),
+                     (int)(source_build_us / 1000));
+            nav_tap_us = 0;
         }
         return;
     }

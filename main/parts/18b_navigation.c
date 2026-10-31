@@ -1419,6 +1419,7 @@ static void nav_open_source(source_mode_t mode)
         nav_close_others_on_show = true;
     }
     source_nav_depth = 0;
+    nav_tap_us = esp_timer_get_time();
     source_request_t request = { .mode = mode, .offset = 0, .push_history = false };
     xQueueSend(source_queue, &request, 0);
 }

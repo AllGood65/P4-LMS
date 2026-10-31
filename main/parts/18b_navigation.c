@@ -1411,8 +1411,13 @@ static void nav_open_source(source_mode_t mode)
 {
     if (source_queue == NULL) return;
     /* Library <-> Queue: the panel stays up and its contents change once the
-     * new list is in (closing it first let Now Playing flash up meanwhile). */
-    nav_hide_other_panels();
+     * new list is in (closing it first let Now Playing flash up meanwhile).
+     * Likewise from Rooms or Settings: that panel stays until the list shows. */
+    if (source_overlay != NULL && !lv_obj_has_flag(source_overlay, LV_OBJ_FLAG_HIDDEN)) {
+        nav_hide_other_panels();
+    } else {
+        nav_close_others_on_show = true;
+    }
     source_nav_depth = 0;
     source_request_t request = { .mode = mode, .offset = 0, .push_history = false };
     xQueueSend(source_queue, &request, 0);
@@ -1421,6 +1426,7 @@ static void nav_open_source(source_mode_t mode)
 static void nav_tab_event_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    nav_close_others_on_show = false;     /* a newer tap wins */
     switch ((int)(intptr_t)lv_event_get_user_data(e)) {
         case TAB_NOW:      nav_hide_panels(); break;
         case TAB_LIBRARY:  nav_open_source(SOURCE_ROOT); break;

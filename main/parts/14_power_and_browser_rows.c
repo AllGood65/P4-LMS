@@ -101,10 +101,20 @@ static void source_idle_timer_cb(lv_timer_t *timer)
     }
 }
 
+/* Set when the Library / Queue tab is tapped while another panel (Rooms,
+ * Settings) is up: that panel stays until the list is ready, then closes
+ * here, so Now Playing doesn't flash up while the list loads. */
+static bool nav_close_others_on_show = false;
+static void nav_hide_other_panels(void);   /* 18b */
+
 static void source_show(void)
 {
     if (source_overlay != NULL) {
         ui_show_panel(source_overlay);
+    }
+    if (nav_close_others_on_show) {
+        nav_close_others_on_show = false;
+        nav_hide_other_panels();
     }
 }
 

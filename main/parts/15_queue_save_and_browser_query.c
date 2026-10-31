@@ -1100,8 +1100,20 @@ static bool source_radio_action_to_request(const char *action_json,
     }
     /* Play just the song tapped: with Lyrion's "play other songs" setting
      * on, an app's song (a YouTube result, say) otherwise brings the whole
-     * list it came from into the queue.  Lyrion ignores it elsewhere. */
-    cJSON_AddItemToArray(cmd_array, cJSON_CreateString("touchToPlaySingle:1"));
+     * list it came from into the queue.  Only on commands that play. */
+    {
+        bool plays = false;
+        const cJSON *w = NULL;
+        cJSON_ArrayForEach(w, cmd_array) {
+            const char *v = cJSON_IsString(w) ? w->valuestring : NULL;
+            if (v != NULL && (strcmp(v, "play") == 0 || strcmp(v, "cmd:play") == 0 ||
+                              strncmp(v, "touchToPlay:", 12) == 0)) {
+                plays = true;
+                break;
+            }
+        }
+        if (plays) cJSON_AddItemToArray(cmd_array, cJSON_CreateString("touchToPlaySingle:1"));
+    }
 
     cJSON *rpc = cJSON_CreateObject();
     cJSON_AddNumberToObject(rpc, "id", 1);

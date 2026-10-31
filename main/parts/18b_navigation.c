@@ -1419,9 +1419,12 @@ static void nav_open_source(source_mode_t mode)
         nav_close_others_on_show = true;
     }
     source_nav_depth = 0;
-    nav_tap_us = esp_timer_get_time();
+    nav_tap_us = (mode == SOURCE_QUEUE) ? esp_timer_get_time() : 0;
     source_request_t request = { .mode = mode, .offset = 0, .push_history = false };
-    xQueueSend(source_queue, &request, 0);
+    if (xQueueSend(source_queue, &request, 0) != pdTRUE && nav_close_others_on_show) {
+        nav_close_others_on_show = false;          /* nothing will open: don't leave it waiting */
+        nav_hide_other_panels();
+    }
 }
 
 static void nav_tab_event_cb(lv_event_t *e)

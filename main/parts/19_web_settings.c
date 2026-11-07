@@ -1644,7 +1644,8 @@ static void web_settings_start(void)
     httpd_register_uri_handler(server, &restore);
     static const httpd_uri_t github  = { .uri = "/github",  .method = HTTP_POST, .handler = web_post_github };
     httpd_register_uri_handler(server, &github);
-    upd_start();                             /* looks for updates on GitHub once a day */
+    upd_start();
+    bat_start();                             /* battery test: GPIO20 reading (18v_battery.c) */                             /* looks for updates on GitHub once a day */
 
     const esp_timer_create_args_t targs = { .callback = ota_confirm_cb, .name = "ota_confirm" };
     if (esp_timer_create(&targs, &ota_confirm_timer) == ESP_OK) {

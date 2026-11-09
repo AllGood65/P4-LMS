@@ -461,6 +461,9 @@ void app_main(void)
         0
     );
 
+    /* Battery level, when "Battery installed" is on (18v_battery.c). */
+    bat_header_create(header);
+
 
     /* ========================================================
      * ALBUM ART

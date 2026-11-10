@@ -767,14 +767,16 @@ static esp_err_t web_send_page(httpd_req_t *req, const char *notice, bool notice
                 "<div class='small'>Only for songs whose files have ReplayGain.</div></div>",
             ui_show_rg ? " selected" : "", ui_show_rg ? "" : " selected");
     {
-        char volts[16];
+        char volts[16], last[160];
         bat_volts_text(volts, sizeof(volts));
+        bat_last_run_text(last, sizeof(last));
         web_add(&o, "<div><label>Battery installed</label><select name='bat_on'>"
                     "<option value='1'%s>Yes - show its level in the header</option>"
                     "<option value='0'%s>No</option></select>"
                     "<div class='small'>For a LiPo in the board's BAT socket. Battery line now: %s "
-                    "(with no battery the charger keeps it near 4.2 V, so leave this off).</div></div></div></section>",
-                ui_battery_on ? " selected" : "", ui_battery_on ? "" : " selected", volts);
+                    "(with no battery the charger keeps it near 4.2 V, so leave this off).</div>"
+                    "<div class='small'>Last run: %s</div></div></div></section>",
+                ui_battery_on ? " selected" : "", ui_battery_on ? "" : " selected", volts, last);
     }
 
     /* Visualizer */

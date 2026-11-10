@@ -36,15 +36,77 @@ static adc_oneshot_unit_handle_t bat_adc = NULL;
 static adc_cali_handle_t bat_cali = NULL;
 static adc_channel_t bat_channel;
 
-/* A single-cell LiPo, resting voltage -> charge (most of its life is spent
- * between 3.7 and 3.9 V, so a straight line would be badly off). */
+/* A single-cell LiPo while it runs the display -> charge.  The display,
+ * backlight and Wi-Fi pull a small battery ~0.1-0.15 V below its resting
+ * voltage, so this sits that much lower than a resting-voltage table (with
+ * one, a full 1000 mAh battery read 80 % moments after unplugging).  Most of
+ * a LiPo's life is spent between 3.6 and 3.9 V, hence the uneven steps.
+ * First test run: 1000 mAh, ~1 h 48 min from full. */
 static const struct { int mv; int pct; } bat_curve[] = {
-    { 4100, 100 }, { 4060, 95 }, { 4020, 90 }, { 3980, 85 }, { 3950, 80 },
-    { 3910, 75 }, { 3870, 70 }, { 3850, 65 }, { 3840, 60 }, { 3820, 55 },
-    { 3800, 50 }, { 3790, 45 }, { 3770, 40 }, { 3750, 35 }, { 3730, 30 },
-    { 3710, 25 }, { 3690, 20 }, { 3670, 15 }, { 3640, 10 }, { 3600, 5 },
-    { 3300, 0 },
+    { 4020, 100 }, { 3980, 95 }, { 3940, 90 }, { 3900, 85 }, { 3860, 80 },
+    { 3830, 75 }, { 3800, 70 }, { 3770, 65 }, { 3750, 60 }, { 3730, 55 },
+    { 3710, 50 }, { 3690, 45 }, { 3670, 40 }, { 3650, 35 }, { 3630, 30 },
+    { 3610, 25 }, { 3590, 20 }, { 3560, 15 }, { 3520, 10 }, { 3470, 5 },
+    { 3350, 0 },
 };
+
+/* ---- run recorder ----------------------------------------------------
+ * While running on the battery, every 5 minutes the run so far (minutes,
+ * starting and latest voltage) is saved.  When the battery runs flat the
+ * last save survives, and at the next start it becomes "last run" - shown
+ * on the web page - so a full discharge can be measured without watching.
+ * "On battery" = below 4.08 V and not rising (charging on USB raises it). */
+#define BAT_NVS_LAST      "bat_last"     /* the finished run shown */
+#define BAT_NVS_CUR       "bat_cur"      /* the run being recorded */
+#define BAT_ON_BATT_MV    4080
+#define BAT_RISE_MV       150            /* this far above the run's lowest = charging
+                                          * (more than the backlight dimming gives back) */
+#define BAT_SAVE_MIN      5
+
+typedef struct { uint16_t minutes, start_mv, end_mv, min_mv; } bat_run_t;
+static bat_run_t bat_last_run;           /* minutes == 0: none recorded */
+
+static void bat_run_save_job(void *arg)  /* LVGL task: flash writes need an internal stack */
+{
+    nvs_handle_t h;
+    if (nvs_open(PLAYER_NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
+    if (nvs_set_blob(h, BAT_NVS_CUR, arg, sizeof(bat_run_t)) == ESP_OK) nvs_commit(h);
+    nvs_close(h);
+}
+
+/* At start-up (main task): the run recorded last time becomes "last run". */
+static void bat_run_load(void)
+{
+    nvs_handle_t h;
+    if (nvs_open(PLAYER_NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
+    bat_run_t cur = { 0 };
+    size_t len = sizeof(cur);
+    if (nvs_get_blob(h, BAT_NVS_CUR, &cur, &len) == ESP_OK && len == sizeof(cur) && cur.minutes >= 10) {
+        nvs_set_blob(h, BAT_NVS_LAST, &cur, sizeof(cur));      /* a real run (10 min+) */
+    }
+    nvs_erase_key(h, BAT_NVS_CUR);
+    nvs_commit(h);
+    len = sizeof(bat_last_run);
+    if (nvs_get_blob(h, BAT_NVS_LAST, &bat_last_run, &len) != ESP_OK || len != sizeof(bat_last_run)) {
+        memset(&bat_last_run, 0, sizeof(bat_last_run));
+    }
+    nvs_close(h);
+}
+
+/* "1 h 48 min on battery, 4.01 V -> 3.42 V" (or a note that none is recorded). */
+static void bat_last_run_text(char *out, size_t len)
+{
+    const bat_run_t r = bat_last_run;
+    if (r.minutes == 0) {
+        snprintf(out, len, "none recorded yet (run it on battery until it switches off, then recharge)");
+        return;
+    }
+    snprintf(out, len, "%u h %u min on battery, %u.%02u V &rarr; %u.%02u V (lowest %u.%02u V)",
+             (unsigned)(r.minutes / 60), (unsigned)(r.minutes % 60),
+             (unsigned)(r.start_mv / 1000), (unsigned)((r.start_mv % 1000) / 10),
+             (unsigned)(r.end_mv / 1000), (unsigned)((r.end_mv % 1000) / 10),
+             (unsigned)(r.min_mv / 1000), (unsigned)((r.min_mv % 1000) / 10));
+}
 
 static int bat_percent(int mv)
 {
@@ -85,6 +147,9 @@ static void bat_task(void *arg)
 {
     (void)arg;
     int n = 0;
+    bat_run_t run = { 0 };
+    int run_s = 0;                       /* seconds on battery this session */
+    bool run_on = false, charging = false;
     for (;;) {
         const int pin = bat_read_pin_mv();
         if (pin >= 0) {
@@ -95,6 +160,24 @@ static void bat_task(void *arg)
              * burst of Wi-Fi or backlight current */
             const int s = bat_smooth_mv;
             bat_smooth_mv = (s < 0) ? bat : s + (bat - s) / 8;
+            /* run recorder (only once the smoothing has settled) */
+            const int sm = bat_smooth_mv;
+            if (ui_battery_on && !charging) {
+                if (!run_on && sm < BAT_ON_BATT_MV) {
+                    run_on = true;
+                    run.start_mv = run.min_mv = (uint16_t)sm;
+                }
+                if (run_on) {
+                    if (sm < run.min_mv) run.min_mv = (uint16_t)sm;
+                    if (sm > run.min_mv + BAT_RISE_MV) {
+                        charging = true;             /* plugged in: stop recording */
+                    } else if (++run_s % (BAT_SAVE_MIN * 60) == 0) {
+                        run.minutes = (uint16_t)(run_s / 60);
+                        run.end_mv = (uint16_t)sm;
+                        ui_post(bat_run_save_job, &run, sizeof(run));
+                    }
+                }
+            }
             if (++n >= BAT_LOG_EVERY) {
                 n = 0;
                 ESP_LOGI(TAG, "Battery: %d.%02d V (pin %d mV) -> %d%%%s", bat / 1000, (bat % 1000) / 10,
@@ -129,7 +212,8 @@ static void bat_start(void)
     };
     bat_calibrated = adc_cali_create_scheme_curve_fitting(&cali_cfg, &bat_cali) == ESP_OK;
 #endif
-    /* Only reads the ADC (no flash writes), so its stack can live in PSRAM
+    bat_run_load();                      /* the last recorded run, before recording a new one */
+    /* Only reads the ADC (its saves go to the LVGL task), so its stack can live in PSRAM
      * and leave the scarce internal RAM to Wi-Fi. */
     if (xTaskCreatePinnedToCoreWithCaps(bat_task, "battery", 3072, NULL, 2, NULL,
                                         tskNO_AFFINITY, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {

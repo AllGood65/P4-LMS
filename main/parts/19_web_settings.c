@@ -767,7 +767,7 @@ static esp_err_t web_send_page(httpd_req_t *req, const char *notice, bool notice
                 "<div class='small'>Only for songs whose files have ReplayGain.</div></div>",
             ui_show_rg ? " selected" : "", ui_show_rg ? "" : " selected");
     {
-        char volts[16], last[160];
+        char volts[16], last[260];
         bat_volts_text(volts, sizeof(volts));
         bat_last_run_text(last, sizeof(last));
         web_add(&o, "<div><label>Battery installed</label><select name='bat_on'>"

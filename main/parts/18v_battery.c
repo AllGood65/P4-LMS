@@ -46,9 +46,11 @@ static const struct { int mv; int pct; } bat_curve[] = {
     { 4020, 100 }, { 3980, 95 }, { 3940, 90 }, { 3900, 85 }, { 3860, 80 },
     { 3830, 75 }, { 3800, 70 }, { 3770, 65 }, { 3750, 60 }, { 3730, 55 },
     { 3710, 50 }, { 3690, 45 }, { 3670, 40 }, { 3650, 35 }, { 3630, 30 },
-    { 3610, 25 }, { 3590, 20 }, { 3560, 15 }, { 3520, 10 }, { 3470, 5 },
-    { 3350, 0 },
+    { 3610, 25 }, { 3590, 20 }, { 3560, 15 }, { 3500, 10 }, { 3420, 6 },
+    { 3320, 3 }, { 3100, 0 },
 };
+/* Second run (beta 2): it kept going to 2.96 V, so 0 % moved from 3.35 V
+ * down to 3.10 V.  The time marks below will give the real shape. */
 
 /* ---- run recorder ----------------------------------------------------
  * While running on the battery, every 5 minutes the run so far (minutes,
@@ -61,9 +63,17 @@ static const struct { int mv; int pct; } bat_curve[] = {
 #define BAT_ON_BATT_MV    4080
 #define BAT_RISE_MV       150            /* this far above the run's lowest = charging
                                           * (more than the backlight dimming gives back) */
-#define BAT_SAVE_MIN      5
+#define BAT_SAVE_MIN      2              /* save every 2 minutes */
 
-typedef struct { uint16_t minutes, start_mv, end_mv, min_mv; } bat_run_t;
+/* Time marks: the minute at which the battery first fell below 3.9, 3.8,
+ * ... 3.1 V (0xFFFF = not reached), so one run gives the curve's real shape. */
+#define BAT_MARKS         9
+#define BAT_MARK_TOP_MV   3900
+#define BAT_MARK_STEP_MV  100
+typedef struct {
+    uint16_t minutes, start_mv, end_mv, min_mv;
+    uint16_t mark_min[BAT_MARKS];
+} bat_run_t;
 static bat_run_t bat_last_run;           /* minutes == 0: none recorded */
 
 static void bat_run_save_job(void *arg)  /* LVGL task: flash writes need an internal stack */
@@ -101,11 +111,21 @@ static void bat_last_run_text(char *out, size_t len)
         snprintf(out, len, "none recorded yet (run it on battery until it switches off, then recharge)");
         return;
     }
-    snprintf(out, len, "%u h %u min on battery, %u.%02u V &rarr; %u.%02u V (lowest %u.%02u V)",
+    int n = snprintf(out, len, "%u h %u min on battery, %u.%02u V &rarr; %u.%02u V (lowest %u.%02u V)",
              (unsigned)(r.minutes / 60), (unsigned)(r.minutes % 60),
              (unsigned)(r.start_mv / 1000), (unsigned)((r.start_mv % 1000) / 10),
              (unsigned)(r.end_mv / 1000), (unsigned)((r.end_mv % 1000) / 10),
              (unsigned)(r.min_mv / 1000), (unsigned)((r.min_mv % 1000) / 10));
+    /* then the time marks: "3.9 V at 0:12, 3.8 V at 0:31, ..." */
+    bool first = true;
+    for (int i = 0; i < BAT_MARKS && n > 0 && (size_t)n < len; i++) {
+        if (r.mark_min[i] == 0xFFFF) continue;
+        const int mv = BAT_MARK_TOP_MV - i * BAT_MARK_STEP_MV;
+        n += snprintf(out + n, len - n, "%s%d.%d V at %u:%02u", first ? ". Times: " : ", ",
+                      mv / 1000, (mv % 1000) / 100,
+                      (unsigned)(r.mark_min[i] / 60), (unsigned)(r.mark_min[i] % 60));
+        first = false;
+    }
 }
 
 static int bat_percent(int mv)
@@ -166,9 +186,15 @@ static void bat_task(void *arg)
                 if (!run_on && sm < BAT_ON_BATT_MV) {
                     run_on = true;
                     run.start_mv = run.min_mv = (uint16_t)sm;
+                    for (int i = 0; i < BAT_MARKS; i++) run.mark_min[i] = 0xFFFF;
                 }
                 if (run_on) {
                     if (sm < run.min_mv) run.min_mv = (uint16_t)sm;
+                    for (int i = 0; i < BAT_MARKS; i++) {
+                        if (run.mark_min[i] == 0xFFFF && sm < BAT_MARK_TOP_MV - i * BAT_MARK_STEP_MV) {
+                            run.mark_min[i] = (uint16_t)(run_s / 60);
+                        }
+                    }
                     if (sm > run.min_mv + BAT_RISE_MV) {
                         charging = true;             /* plugged in: stop recording */
                     } else if (++run_s % (BAT_SAVE_MIN * 60) == 0) {
@@ -237,6 +263,7 @@ static void bat_volts_text(char *out, size_t len)
 static lv_obj_t *bat_header_label = NULL;
 static int bat_shown_pct = -1;          /* what's on screen (-1 = hidden) */
 static bool bat_low_warned = false;
+static bool bat_empty_warned = false;
 
 static void bat_header_timer_cb(lv_timer_t *t)
 {
@@ -267,6 +294,12 @@ static void bat_header_timer_cb(lv_timer_t *t)
     lv_obj_clear_flag(bat_header_label, LV_OBJ_FLAG_HIDDEN);
     bat_shown_pct = p;
 
+    if (p <= 2 && !bat_empty_warned) {
+        bat_empty_warned = true;
+        ui_toast("Battery almost empty - plug in to charge");
+    } else if (p > BAT_LOW_RESET_PCT) {
+        bat_empty_warned = false;
+    }
     if (p < BAT_LOW_PCT && !bat_low_warned) {
         bat_low_warned = true;
         snprintf(text, sizeof(text), "Battery low - %d%%", p);

@@ -36,21 +36,20 @@ static adc_oneshot_unit_handle_t bat_adc = NULL;
 static adc_cali_handle_t bat_cali = NULL;
 static adc_channel_t bat_channel;
 
-/* A single-cell LiPo while it runs the display -> charge.  The display,
- * backlight and Wi-Fi pull a small battery ~0.1-0.15 V below its resting
- * voltage, so this sits that much lower than a resting-voltage table (with
- * one, a full 1000 mAh battery read 80 % moments after unplugging).  Most of
- * a LiPo's life is spent between 3.6 and 3.9 V, hence the uneven steps.
- * First test run: 1000 mAh, ~1 h 48 min from full. */
+/* Battery voltage while it runs the display -> share of the run left.
+ * Measured (beta 3 run recorder, a 1000 mAh LiPo on a v3 board): from full
+ * it ran 1 h 52 min, passing 3.9 V at 0:01, 3.8 V at 0:42, 3.7 V at 0:55,
+ * 3.6 V at 1:20, 3.5 V at 1:26, 3.4 V at 1:41, 3.3 V at 1:45, 3.2 V at 1:47
+ * and 3.1 V at 1:49, then cut out at about 2.7-3.0 V.  So the percentage
+ * is the time left: 3.8 V is ~60 %, 3.4 V ~10 % (about 10 minutes), and 0 %
+ * at 3.05 V leaves a minute or two.  The display pulls a small battery
+ * well below its resting voltage, so these sit lower than resting-voltage
+ * tables (with one, a full battery read 80 % moments after unplugging). */
 static const struct { int mv; int pct; } bat_curve[] = {
-    { 4020, 100 }, { 3980, 95 }, { 3940, 90 }, { 3900, 85 }, { 3860, 80 },
-    { 3830, 75 }, { 3800, 70 }, { 3770, 65 }, { 3750, 60 }, { 3730, 55 },
-    { 3710, 50 }, { 3690, 45 }, { 3670, 40 }, { 3650, 35 }, { 3630, 30 },
-    { 3610, 25 }, { 3590, 20 }, { 3560, 15 }, { 3500, 10 }, { 3420, 6 },
-    { 3320, 3 }, { 3100, 0 },
+    { 3930, 100 }, { 3900, 98 }, { 3800, 62 }, { 3700, 51 }, { 3600, 29 },
+    { 3500, 23 }, { 3400, 10 }, { 3300, 6 }, { 3200, 4 }, { 3100, 2 },
+    { 3050, 0 },
 };
-/* Second run (beta 2): it kept going to 2.96 V, so 0 % moved from 3.35 V
- * down to 3.10 V.  The time marks below will give the real shape. */
 
 /* ---- run recorder ----------------------------------------------------
  * While running on the battery, every 5 minutes the run so far (minutes,

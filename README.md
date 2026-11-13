@@ -19,6 +19,7 @@ A 7" touchscreen controller for whole-house music, built on a Waveshare ESP32-P4
 - **Sleep timer and alarms** that power the amps down and up in order
 - **Web settings page:** choose which rooms to show, Home Assistant setup, power switches, weather location, time zone, settings backup/restore, and firmware updates over Wi-Fi
 - **Location profiles:** remembers a separate Lyrion server and players for each Wi-Fi network
+- **Battery level** for portable builds: with a LiPo in the board's BAT socket, turn on *Battery installed* in the web settings for a battery icon and percentage in the header, low-battery warnings, and the last run's time on battery. (The board can't tell whether it's charging; the green LED on the board shows that.)
 
 ## Screenshots
 

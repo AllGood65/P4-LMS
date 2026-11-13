@@ -15,6 +15,7 @@ idf_component_register(
         nvs_flash
         libpng
         esp_timer
+        esp_adc
         esp_http_server
         app_update
         esp_app_format

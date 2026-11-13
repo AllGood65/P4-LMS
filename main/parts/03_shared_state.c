@@ -304,16 +304,103 @@ static void ui_anim_run(lv_obj_t *obj, lv_anim_exec_xcb_t cb, int32_t from, int3
     lv_anim_start(&a);
 }
 
-/* Show a panel.  (It used to rise 28 px into place, but a full-size panel
- * can only be redrawn a few times in 0.2 s in software, so the rise showed as
- * a jump.  Panels now simply appear.) */
+static void ui_anim_x_cb(void *obj, int32_t v)
+{
+    lv_obj_set_x((lv_obj_t *)obj, v);
+}
+
+static void ui_anim_image_opa_cb(void *obj, int32_t v)
+{
+    lv_obj_set_style_image_opa((lv_obj_t *)obj, (lv_opa_t)v, 0);
+}
+
+/* ---- How fast the screen draws ------------------------------------------
+ * Every frame LVGL renders is timed.  Settings > About shows the figures (and
+ * the log, once a minute while something is drawing), and the panel
+ * transition below only runs when a full panel draws quickly enough to look
+ * smooth - so a slow build never gets a stuttering animation. */
+#define UI_PANEL_FAST_US   30000         /* a full panel in under 30 ms: animate it */
+static struct {
+    int64_t  t_start;                    /* this frame's start (esp_timer us) */
+    uint32_t frames, sum_us, max_us;     /* since the last one-second roll-up  */
+    uint32_t fps, avg_us, worst_us;      /* the last full second               */
+    uint32_t min_frames, min_sum_us, min_max_us;   /* this minute, for the log */
+    bool     panel_pending;              /* the next frame draws a newly shown panel */
+    uint32_t panel_us;                   /* how long that took last time (0 = not measured) */
+} ui_perf;
+
+static void ui_perf_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_RENDER_START) {
+        ui_perf.t_start = esp_timer_get_time();
+        return;
+    }
+    const uint32_t us = (uint32_t)(esp_timer_get_time() - ui_perf.t_start);
+    ui_perf.frames++;
+    ui_perf.sum_us += us;
+    if (us > ui_perf.max_us) ui_perf.max_us = us;
+    if (ui_perf.panel_pending) {
+        ui_perf.panel_pending = false;
+        ui_perf.panel_us = us;
+    }
+}
+
+static void ui_perf_timer_cb(lv_timer_t *t)
+{
+    (void)t;
+    static int seconds = 0;
+    ui_perf.fps = ui_perf.frames;
+    ui_perf.avg_us = ui_perf.frames ? ui_perf.sum_us / ui_perf.frames : 0;
+    ui_perf.worst_us = ui_perf.max_us;
+    ui_perf.min_frames += ui_perf.frames;
+    ui_perf.min_sum_us += ui_perf.sum_us;
+    if (ui_perf.max_us > ui_perf.min_max_us) ui_perf.min_max_us = ui_perf.max_us;
+    ui_perf.frames = ui_perf.sum_us = ui_perf.max_us = 0;
+    if (++seconds >= 60) {
+        seconds = 0;
+        if (ui_perf.min_frames > 0) {
+            ESP_LOGI(TAG, "Screen: %u frames this minute, %u.%u ms each on average, slowest %u ms; a full panel takes %u ms",
+                     (unsigned)ui_perf.min_frames,
+                     (unsigned)(ui_perf.min_sum_us / ui_perf.min_frames / 1000),
+                     (unsigned)(ui_perf.min_sum_us / ui_perf.min_frames % 1000 / 100),
+                     (unsigned)(ui_perf.min_max_us / 1000), (unsigned)(ui_perf.panel_us / 1000));
+        }
+        ui_perf.min_frames = ui_perf.min_sum_us = ui_perf.min_max_us = 0;
+    }
+}
+
+/* Call once with the display lock held. */
+static void ui_perf_start(lv_display_t *display)
+{
+    lv_display_add_event_cb(display, ui_perf_event_cb, LV_EVENT_RENDER_START, NULL);
+    lv_display_add_event_cb(display, ui_perf_event_cb, LV_EVENT_RENDER_READY, NULL);
+    lv_timer_create(ui_perf_timer_cb, 1000, NULL);
+}
+
+/* "34 frames/s, 9.4 ms a frame (slowest 21), panel 24 ms" for Settings > About. */
+static void ui_perf_text(char *out, size_t len)
+{
+    snprintf(out, len, "Screen %u frames/s  %u.%u ms each (slowest %u)  panel %u ms",
+             (unsigned)ui_perf.fps, (unsigned)(ui_perf.avg_us / 1000), (unsigned)(ui_perf.avg_us % 1000 / 100),
+             (unsigned)(ui_perf.worst_us / 1000), (unsigned)(ui_perf.panel_us / 1000));
+}
+
+/* Show a panel.  It rises a few pixels into place - but only when the last
+ * panel drew fast enough for that to look smooth (see ui_perf above); a full
+ * panel that takes long to draw simply appears, as an animation made of three
+ * or four frames looks like a stutter. */
 static void ui_show_panel(lv_obj_t *p)
 {
     if (p == NULL) return;
+    const bool was_hidden = lv_obj_has_flag(p, LV_OBJ_FLAG_HIDDEN);
     lv_anim_delete(p, ui_anim_translate_y_cb);
     lv_obj_set_style_translate_y(p, 0, 0);
     lv_obj_clear_flag(p, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(p);
+    if (!was_hidden) return;                       /* already up: nothing to animate */
+    const bool fast = ui_perf.panel_us > 0 && ui_perf.panel_us < UI_PANEL_FAST_US;
+    ui_perf.panel_pending = true;                  /* time the frame that draws it */
+    if (ui_anim_on && fast) ui_anim_run(p, ui_anim_translate_y_cb, 22, 0, 190);
 }
 
 /* New text fades in. */

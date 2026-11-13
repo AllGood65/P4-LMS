@@ -43,6 +43,20 @@ static lv_obj_t *create_button(
     lv_obj_set_style_bg_opa(button, LV_OPA_70, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_border_color(button, lv_color_hex(UI_ACCENT_GLOW), LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_translate_y(button, 2, LV_PART_MAIN | LV_STATE_PRESSED);
+    /* ...and it eases in and out of that instead of snapping: quick on the
+     * way down (so a tap feels instant), softer coming back up. */
+    if (ui_anim_on) {
+        static const lv_style_prop_t props[] = { LV_STYLE_BG_OPA, LV_STYLE_TRANSLATE_Y, LV_STYLE_BORDER_COLOR, 0 };
+        static lv_style_transition_dsc_t press, release;
+        static bool made = false;
+        if (!made) {
+            lv_style_transition_dsc_init(&press, props, lv_anim_path_ease_out, 70, 0, NULL);
+            lv_style_transition_dsc_init(&release, props, lv_anim_path_ease_out, 180, 0, NULL);
+            made = true;
+        }
+        lv_obj_set_style_transition(button, &press, LV_PART_MAIN | LV_STATE_PRESSED);
+        lv_obj_set_style_transition(button, &release, LV_PART_MAIN);
+    }
     lv_obj_set_style_border_width(
         button,
         1,

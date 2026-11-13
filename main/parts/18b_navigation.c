@@ -18,6 +18,10 @@ enum { TAB_NOW = 0, TAB_LIBRARY, TAB_QUEUE, TAB_ROOMS, TAB_SETTINGS, TAB_COUNT }
 static lv_obj_t *nav_bar = NULL;
 static lv_obj_t *nav_tabs[TAB_COUNT];
 static int       nav_tab_shown = -1;
+static lv_obj_t *nav_pill = NULL;             /* the highlight behind the current tab */
+static int       nav_tab_pending = -1;        /* tab just tapped, shown before its panel is up */
+static uint32_t  nav_tab_pending_tick = 0;
+static void nav_show_tab(int now);
 
 static lv_obj_t *room_chip = NULL;
 static lv_obj_t *room_chip_label = NULL;
@@ -62,8 +66,10 @@ static void ui_toast(const char *text)
 {
     if (toast == NULL || text == NULL) return;
     lv_label_set_text(toast_label, text);
+    const bool was_hidden = lv_obj_has_flag(toast, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(toast, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(toast);
+    if (was_hidden) ui_anim_run(toast, ui_anim_translate_y_cb, 18, 0, 200);   /* slides up into place */
     if (toast_timer == NULL) {
         toast_timer = lv_timer_create(toast_hide_cb, 2800, NULL);
         lv_timer_set_repeat_count(toast_timer, -1);
@@ -1439,6 +1445,15 @@ static void nav_tab_event_cb(lv_event_t *e)
         case TAB_SETTINGS: hub_show(); break;
         default: break;
     }
+    /* Light the tapped tab straight away.  (Library and Queue only appear once
+     * their list has arrived; until then the tab check below would still say
+     * the old one, so the tap holds for a few seconds.) */
+    const int tapped = (int)(intptr_t)lv_event_get_user_data(e);
+    if (tapped >= 0 && tapped < TAB_COUNT) {
+        nav_tab_pending = tapped;
+        nav_tab_pending_tick = lv_tick_get();
+        nav_show_tab(tapped);
+    }
 }
 
 static bool nav_visible(lv_obj_t *o) { return o != NULL && !lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN); }
@@ -1459,10 +1474,24 @@ static int nav_current_tab(void)
 static void nav_style_tab(int i, bool on)
 {
     lv_obj_t *tab = nav_tabs[i];
-    lv_obj_set_style_bg_opa(tab, on ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
     const uint32_t col = on ? UI_ACCENT : UI_TEXT_DIM;
     lv_obj_set_style_text_color(lv_obj_get_child(tab, 0), lv_color_hex(col), 0);
     lv_obj_set_style_text_color(lv_obj_get_child(tab, 1), lv_color_hex(col), 0);
+}
+
+#define NAV_TAB_X(i)   ((i) * 204 + 14)
+
+/* Mark tab `now` as the current one: its label lights up and the highlight
+ * slides over to it. */
+static void nav_show_tab(int now)
+{
+    if (now == nav_tab_shown) return;
+    for (int i = 0; i < TAB_COUNT; i++) nav_style_tab(i, i == now);
+    if (nav_pill != NULL) {
+        if (nav_tab_shown < 0) lv_obj_set_x(nav_pill, NAV_TAB_X(now));          /* first time: no slide */
+        else ui_anim_run(nav_pill, ui_anim_x_cb, lv_obj_get_x(nav_pill), NAV_TAB_X(now), 220);
+    }
+    nav_tab_shown = now;
 }
 
 /* ---- Now Playing FAV button ------------------------------------------------
@@ -1516,10 +1545,10 @@ static void nav_sync_timer_cb(lv_timer_t *t)
 {
     (void)t;
     const int now = nav_current_tab();
-    if (now != nav_tab_shown) {
-        for (int i = 0; i < TAB_COUNT; i++) nav_style_tab(i, i == now);
-        nav_tab_shown = now;
+    if (nav_tab_pending >= 0 && (now == nav_tab_pending || lv_tick_elaps(nav_tab_pending_tick) > 4000U)) {
+        nav_tab_pending = -1;                 /* the tapped tab is up (or never came) */
     }
+    if (nav_tab_pending < 0) nav_show_tab(now);
     nav_room_chip_refresh();
     rooms_refresh_locked();
     sleep_refresh_locked();
@@ -1573,16 +1602,27 @@ static void nav_create(lv_obj_t *screen)
     lv_obj_set_style_border_color(nav_bar, lv_color_hex(UI_EDGE), 0);
     lv_obj_clear_flag(nav_bar, LV_OBJ_FLAG_SCROLLABLE);
 
+    /* One highlight that slides to the current tab (made first, so it sits
+     * behind the tabs). */
+    nav_pill = lv_obj_create(nav_bar);
+    lv_obj_remove_style_all(nav_pill);
+    lv_obj_set_size(nav_pill, 176, 52);
+    lv_obj_set_pos(nav_pill, NAV_TAB_X(0), 6);
+    lv_obj_set_style_radius(nav_pill, 14, 0);
+    lv_obj_set_style_bg_color(nav_pill, lv_color_hex(UI_ACCENT_DARK), 0);
+    lv_obj_set_style_bg_opa(nav_pill, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(nav_pill, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+
     for (int i = 0; i < TAB_COUNT; i++) {
         lv_obj_t *tab = lv_obj_create(nav_bar);
         lv_obj_remove_style_all(tab);
         lv_obj_set_size(tab, 176, 52);
-        lv_obj_set_pos(tab, i * 204 + 14, 6);
+        lv_obj_set_pos(tab, NAV_TAB_X(i), 6);
         lv_obj_set_style_radius(tab, 14, 0);
         lv_obj_set_style_bg_color(tab, lv_color_hex(UI_ACCENT_DARK), 0);
         lv_obj_set_style_bg_opa(tab, LV_OPA_TRANSP, 0);
         lv_obj_set_style_bg_color(tab, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
-        lv_obj_set_style_bg_opa(tab, LV_OPA_COVER, LV_STATE_PRESSED);
+        lv_obj_set_style_bg_opa(tab, LV_OPA_60, LV_STATE_PRESSED);
         lv_obj_clear_flag(tab, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(tab, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_ext_click_area(tab, 6);

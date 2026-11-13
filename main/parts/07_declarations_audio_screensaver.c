@@ -176,6 +176,13 @@ static void album_art_show_job(void *arg)
     if (album_image != NULL) {
         lv_image_set_src(album_image, &album_image_dsc);
         lv_obj_clear_flag(album_image, LV_OBJ_FLAG_HIDDEN);
+        /* the new cover fades in (not while a full-screen view hides it) */
+        if (!screensaver_active && !visualizer_visible) {
+            ui_anim_run(album_image, ui_anim_image_opa_cb, LV_OPA_TRANSP, LV_OPA_COVER, 320);
+        } else {
+            lv_anim_delete(album_image, ui_anim_image_opa_cb);
+            lv_obj_set_style_image_opa(album_image, LV_OPA_COVER, 0);
+        }
     }
     if (album_placeholder != NULL) {
         lv_obj_add_flag(album_placeholder, LV_OBJ_FLAG_HIDDEN);

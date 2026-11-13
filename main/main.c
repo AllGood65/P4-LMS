@@ -323,6 +323,8 @@ void app_main(void)
     lv_obj_t *screen =
         lv_screen_active();
 
+    ui_perf_start(display);          /* times every frame (Settings > About, the log) */
+
     /* Every label without its own font inherits this one (with accents). */
     lv_obj_set_style_text_font(screen, &p4_font_14, 0);
     lv_obj_set_style_text_font(lv_layer_top(), &p4_font_14, 0);
@@ -1529,7 +1531,7 @@ void app_main(void)
 
     vu_timer = lv_timer_create(
         vu_meter_timer_cb,
-        50,
+        33,                 /* 30 steps a second */
         NULL
     );
     lv_timer_create(vu_panel_keepalive_timer_cb, 2000, spectrum);

@@ -491,6 +491,7 @@ typedef struct {
 } upd_write_job_t;
 
 static upd_write_job_t upd_write_job;
+#define UPD_WRITER_STACK  4096
 
 static void upd_writer_task(void *arg)
 {
@@ -656,13 +657,31 @@ static void upd_install(void)
         snprintf(upd_write_job.ver, sizeof(upd_write_job.ver), "%s", ver);
         upd_write_job.notify = xTaskGetCurrentTaskHandle();
         xTaskNotifyStateClear(NULL);
-        if (xTaskCreate(upd_writer_task, "upd_write", 4096, &upd_write_job, 3, NULL) != pdPASS) {
+        /* Its stack must be in main internal RAM: flash writes switch off
+         * the cache, and a stack anywhere else trips an assert.  A plain
+         * xTaskCreate() may also hand out the P4's small TCM area when the
+         * main RAM is fragmented (as it can be right after a download) -
+         * which crashed an install on one display.  TCM can't do DMA, so
+         * asking for DMA-capable memory rules it out. */
+        const uint32_t caps = MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT;
+        StackType_t *stack = heap_caps_malloc(UPD_WRITER_STACK, caps);
+        StaticTask_t *tcb = heap_caps_malloc(sizeof(StaticTask_t), caps);
+        TaskHandle_t writer = (stack != NULL && tcb != NULL)
+            ? xTaskCreateStatic(upd_writer_task, "upd_write", UPD_WRITER_STACK, &upd_write_job, 3, stack, tcb)
+            : NULL;
+        if (writer == NULL) {
             fail = "Not enough memory to install - nothing was changed";
         } else {
             uint32_t result = 1;
             xTaskNotifyWait(0, UINT32_MAX, &result, portMAX_DELAY);
             if (result == 3)      fail = "The update file is damaged - the current version is untouched";
             else if (result != 0) fail = "Couldn't finish installing - the current version is untouched";
+            /* let it finish deleting itself before its memory goes back */
+            for (int i = 0; i < 50 && eTaskGetState(writer) != eDeleted; i++) vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        if (writer == NULL || eTaskGetState(writer) == eDeleted) {
+            heap_caps_free(stack);
+            heap_caps_free(tcb);
         }
     }
     if (img != NULL) heap_caps_free(img);

@@ -1488,8 +1488,9 @@ static void nav_show_tab(int now)
     if (now == nav_tab_shown) return;
     for (int i = 0; i < TAB_COUNT; i++) nav_style_tab(i, i == now);
     if (nav_pill != NULL) {
-        if (nav_tab_shown < 0) lv_obj_set_x(nav_pill, NAV_TAB_X(now));          /* first time: no slide */
-        else ui_anim_run(nav_pill, ui_anim_x_cb, lv_obj_get_x(nav_pill), NAV_TAB_X(now), 220);
+        /* jumps straight there: sliding it while the new panel is being drawn
+         * (about 65 ms a frame) looked jerky on the display */
+        lv_obj_set_x(nav_pill, NAV_TAB_X(now));
     }
     nav_tab_shown = now;
 }

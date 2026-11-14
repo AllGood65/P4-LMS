@@ -304,11 +304,6 @@ static void ui_anim_run(lv_obj_t *obj, lv_anim_exec_xcb_t cb, int32_t from, int3
     lv_anim_start(&a);
 }
 
-static void ui_anim_x_cb(void *obj, int32_t v)
-{
-    lv_obj_set_x((lv_obj_t *)obj, v);
-}
-
 /* ---- How fast the screen draws ------------------------------------------
  * Every frame LVGL renders is timed.  Settings > About shows the figures (and
  * the log, once a minute while something is drawing), and the panel

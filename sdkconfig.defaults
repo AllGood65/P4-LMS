@@ -12,11 +12,10 @@ CONFIG_SPIRAM=y
 # Wi-Fi link to the ESP32-C6 doesn't run short (updates from GitHub)
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 # Build for speed (-O2) rather than for debugging (-Og): the interface is
-# drawn in software, and this is what makes lists, the meters and the
-# transitions run smoothly
+# drawn in software, so this shortens every frame.  The refresh rate stays
+# at LVGL's 30 a second: at 60 the drawing task used a whole CPU core and
+# slowed album art and the network (tried in a 2.9 test build)
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
-# LVGL: draw and read the touch panel up to 60 times a second (was 30)
-CONFIG_LV_DEF_REFR_PERIOD=16
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_DRAW_BUF_ALIGN=64
 CONFIG_LV_USE_PPA=y

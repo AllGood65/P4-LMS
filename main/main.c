@@ -1531,7 +1531,7 @@ void app_main(void)
 
     vu_timer = lv_timer_create(
         vu_meter_timer_cb,
-        33,                 /* 30 steps a second */
+        50,
         NULL
     );
     lv_timer_create(vu_panel_keepalive_timer_cb, 2000, spectrum);

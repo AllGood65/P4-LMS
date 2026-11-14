@@ -309,11 +309,6 @@ static void ui_anim_x_cb(void *obj, int32_t v)
     lv_obj_set_x((lv_obj_t *)obj, v);
 }
 
-static void ui_anim_image_opa_cb(void *obj, int32_t v)
-{
-    lv_obj_set_style_image_opa((lv_obj_t *)obj, (lv_opa_t)v, 0);
-}
-
 /* ---- How fast the screen draws ------------------------------------------
  * Every frame LVGL renders is timed.  Settings > About shows the figures (and
  * the log, once a minute while something is drawing), and the panel

@@ -307,9 +307,8 @@ static void vu_meter_timer_cb(lv_timer_t *timer)
     static int last_left_marker_x = -1;
     static int last_right_marker_x = -1;
 
-    /* per 33 ms step (the same attack and decay as 0.42 / 0.16 per 50 ms) */
-    const float rise_speed = 0.30f;
-    const float fall_speed = 0.11f;
+    const float rise_speed = 0.42f;
+    const float fall_speed = 0.16f;
     const uint32_t now = lv_tick_get();
 
     int target_l = vu_left_target;

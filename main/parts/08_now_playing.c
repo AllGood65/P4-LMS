@@ -571,6 +571,12 @@ static bool update_album_art(const char *player_id)
     if (update_album_art_fetch(player_id, first_png)) {
         return true;
     }
+    /* The server never answered (it can sit on a stream's picture for a long
+     * time): asking again in the other format would only wait as long again,
+     * and nothing else on Now Playing updates while this waits. */
+    if (album_art_last_status <= 0) {
+        return false;
+    }
     ESP_LOGW(TAG, "Album art: retrying as %s", first_png ? "JPEG" : "PNG");
     return update_album_art_fetch(player_id, !first_png);
 }
@@ -1813,6 +1819,7 @@ static bool lyrion_get_status(void)
     static char     art_failed_key[sizeof(album_art_key)] = "";
     static char     art_shown_stream[sizeof(fav_url)] = "";   /* radio stream the shown picture came from */
     static uint32_t art_failed_ms = 0;
+    static uint32_t art_retry_ms = 30000U;  /* doubles each time the same cover fails, up to 5 min */
     static uint32_t art_recheck_ms = 0;    /* new station: look again a few seconds later */
     const uint32_t  art_now_ms = esp_log_timestamp();
 
@@ -1827,7 +1834,7 @@ static bool lyrion_get_status(void)
     }
 
     if (strcmp(album_art_key, last_album_art_key) != 0 &&
-        !(strcmp(album_art_key, art_failed_key) == 0 && art_now_ms - art_failed_ms < 30000U)) {
+        !(strcmp(album_art_key, art_failed_key) == 0 && art_now_ms - art_failed_ms < art_retry_ms)) {
         ESP_LOGI(TAG, "Album-art change detected: [%s]", album_art_key);
 
         /* Keep the current cover until the replacement downloads and decodes successfully. */
@@ -1860,7 +1867,11 @@ static bool lyrion_get_status(void)
             snprintf(last_album_art_key, sizeof(last_album_art_key), "%s", album_art_key);
             art_failed_key[0] = '\0';
         } else {
-            ESP_LOGW(TAG, "Album-art update failed; keeping previous artwork (retry in 30 s)");
+            if (strcmp(art_failed_key, album_art_key) != 0) art_retry_ms = 30000U;
+            else if (art_retry_ms < 300000U) art_retry_ms *= 2;
+            if (art_retry_ms > 300000U) art_retry_ms = 300000U;
+            ESP_LOGW(TAG, "Album-art update failed; keeping previous artwork (retry in %u s)",
+                     (unsigned)(art_retry_ms / 1000U));
             snprintf(art_failed_key, sizeof(art_failed_key), "%s", album_art_key);
             art_failed_ms = art_now_ms;
         }

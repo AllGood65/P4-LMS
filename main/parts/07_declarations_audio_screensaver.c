@@ -453,7 +453,7 @@ static void ss_clock_apply_style(bool cover)
     const int digits_h = vis_h * sc / 256;
     const int date_h = ss_clk_date != 0 ? 22 + 48 : 0;
     const int group = digits_h + date_h;
-    int top = cover ? (330 - group) / 2 + 8 : (600 - group) / 2 - 10;
+    int top = cover ? (340 - group) / 2 : (600 - group) / 2 - 10;
     if (top < 8) top = 8;
     /* Scaling is about the row's centre; place the label so the scaled
      * digits start at `top`.  (The row has 12 px padding above the label.) */
@@ -959,19 +959,20 @@ static void create_screensaver(lv_obj_t *screen)
     lv_obj_set_style_text_letter_space(screensaver_date_label, 2, 0);
     lv_obj_set_width(screensaver_date_label, 1024);
 
-    /* The paused song: small dimmed cover and two lines of text. */
-    ss_pause_box = ss_box(ss_clock_box, 540, 100);
-    lv_obj_set_pos(ss_pause_box, (1024 - 540) / 2, 350);
+    /* The paused song under the clock: a dimmed cover (big enough to see
+     * across the room, like the Android app's) and three lines of text. */
+    ss_pause_box = ss_box(ss_clock_box, 700, 196);
+    lv_obj_set_pos(ss_pause_box, (1024 - 700) / 2, 352);
     ss_pause_img = lv_image_create(ss_pause_box);
-    lv_obj_set_size(ss_pause_img, 96, 96);
+    lv_obj_set_size(ss_pause_img, 190, 190);
     lv_image_set_inner_align(ss_pause_img, LV_IMAGE_ALIGN_STRETCH);
     lv_obj_set_style_image_recolor(ss_pause_img, lv_color_hex(0x000000), 0);
     lv_obj_set_style_image_recolor_opa(ss_pause_img, LV_OPA_40, 0);
     lv_obj_set_pos(ss_pause_img, 0, 2);
     lv_obj_add_flag(ss_pause_img, LV_OBJ_FLAG_HIDDEN);
-    ss_pause_state  = ui_text(ss_pause_box, "", &p4_font_14, UI_TEXT_DIM, 116, 12, 420);
-    ss_pause_title  = ui_text(ss_pause_box, "", &p4_font_18, UI_TEXT_SOFT, 116, 36, 420);
-    ss_pause_artist = ui_text(ss_pause_box, "", &p4_font_16, UI_TEXT_DIM, 116, 64, 420);
+    ss_pause_state  = ui_text(ss_pause_box, "", &p4_font_16, UI_TEXT_DIM, 214, 38, 486);
+    ss_pause_title  = ui_text(ss_pause_box, "", &p4_font_28, UI_TEXT_SOFT, 214, 70, 486);
+    ss_pause_artist = ui_text(ss_pause_box, "", &p4_font_18, UI_TEXT_DIM, 214, 118, 486);
     lv_obj_add_flag(ss_pause_box, LV_OBJ_FLAG_HIDDEN);
 
     /* ---- album art view ---- */

@@ -9,7 +9,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/queue.h"
-#include "esp_pthread.h"
 #include "freertos/task.h"
 
 #include "esp_err.h"
@@ -262,26 +261,10 @@ void app_main(void)
      * START DISPLAY + TOUCH + LVGL
      * ======================================================== */
 
-    /* LVGL draws each frame with two threads (sdkconfig.defaults: LV_OS_PTHREAD,
-     * two draw units), started inside bsp_display_start_with_config.  Their
-     * stacks go in PSRAM: in internal RAM the two 8 KB stacks left the Wi-Fi
-     * link short of memory (tried in a 2.9 test build).  They only draw -
-     * they never touch the flash chip - so PSRAM stacks are safe.  Priority 4
-     * keeps them just below the network tasks. */
-    esp_pthread_cfg_t draw_cfg = esp_pthread_get_default_config();
-    draw_cfg.stack_alloc_caps = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
-    draw_cfg.prio = 4;
-    draw_cfg.thread_name = "lv_draw";
-    esp_pthread_set_cfg(&draw_cfg);
-
     lv_display_t *display =
         bsp_display_start_with_config(
             &cfg
         );
-
-    /* back to the defaults for any other thread this task starts */
-    esp_pthread_cfg_t plain_cfg = esp_pthread_get_default_config();
-    esp_pthread_set_cfg(&plain_cfg);
 
 
     ESP_ERROR_CHECK(

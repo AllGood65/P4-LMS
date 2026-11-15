@@ -16,11 +16,9 @@ CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 # at LVGL's 30 a second: at 60 the drawing task used a whole CPU core and
 # slowed album art and the network (tried in a 2.9 test build)
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
-# Draw each frame with two threads, one per CPU core, so a full-screen redraw
-# takes about half as long.  LVGL uses pthreads for them so main.c can put
-# their stacks in PSRAM (in internal RAM they starved the Wi-Fi link)
-CONFIG_LV_OS_PTHREAD=y
-CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=2
+# LVGL draws with one thread.  Two (LV_OS_PTHREAD/FREERTOS + two draw units)
+# were tried in 2.9 tests: with internal-RAM stacks they starved the Wi-Fi
+# link; with PSRAM stacks they drew full panels slower than one thread does.
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_DRAW_BUF_ALIGN=64
 CONFIG_LV_USE_PPA=y

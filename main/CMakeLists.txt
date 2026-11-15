@@ -20,5 +20,4 @@ idf_component_register(
         app_update
         esp_app_format
         mdns
-        pthread
 )

@@ -183,8 +183,69 @@ static void album_art_show_job(void *arg)
     screensaver_cover_changed(true);
 }
 
+/* A cover smaller than the frame (Lyrion never enlarges a picture: a song
+ * with a 176x176 embedded picture arrives at 176x176) is enlarged here, once,
+ * with smooth (bilinear) scaling, so it fills the frame like the others.
+ * Returns a new buffer, or NULL to show the original as it is. */
+static uint8_t *album_art_enlarge(const uint8_t *src, uint32_t w, uint32_t h, uint32_t padded,
+                                  uint32_t *out_w, uint32_t *out_h, size_t *out_size)
+{
+    if (w == 0 || h == 0 || (w >= ALBUM_ART_WIDTH * 9U / 10U && h >= ALBUM_ART_HEIGHT * 9U / 10U)) {
+        return NULL;                      /* big enough already */
+    }
+    /* fit inside the frame, keeping the shape */
+    uint32_t nw = ALBUM_ART_WIDTH, nh = (uint32_t)((uint64_t)h * ALBUM_ART_WIDTH / w);
+    if (nh > ALBUM_ART_HEIGHT) {
+        nh = ALBUM_ART_HEIGHT;
+        nw = (uint32_t)((uint64_t)w * ALBUM_ART_HEIGHT / h);
+    }
+    if (nw < 2 || nh < 2 || w < 2 || h < 2) return NULL;
+    const size_t size = (size_t)nw * nh * 2U;
+    uint16_t *dst = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (dst == NULL) return NULL;
+    const uint16_t *in = (const uint16_t *)src;
+
+    for (uint32_t y = 0; y < nh; y++) {
+        const uint32_t fy = (uint32_t)((uint64_t)y * (h - 1U) * 256U / (nh - 1U));   /* 8.8 fixed point */
+        const uint32_t y0 = fy >> 8, y1 = (y0 + 1U < h) ? y0 + 1U : y0, wy = fy & 255U;
+        const uint16_t *r0 = in + (size_t)y0 * padded, *r1 = in + (size_t)y1 * padded;
+        uint16_t *out = dst + (size_t)y * nw;
+        for (uint32_t x = 0; x < nw; x++) {
+            const uint32_t fx = (uint32_t)((uint64_t)x * (w - 1U) * 256U / (nw - 1U));
+            const uint32_t x0 = fx >> 8, x1 = (x0 + 1U < w) ? x0 + 1U : x0, wx = fx & 255U;
+            const uint16_t p[4] = { r0[x0], r0[x1], r1[x0], r1[x1] };
+            const uint32_t k[4] = { (256U - wx) * (256U - wy), wx * (256U - wy), (256U - wx) * wy, wx * wy };
+            uint32_t r = 0, g = 0, b = 0;
+            for (int i = 0; i < 4; i++) {
+                r += ((p[i] >> 11) & 0x1FU) * k[i];
+                g += ((p[i] >> 5) & 0x3FU) * k[i];
+                b += (p[i] & 0x1FU) * k[i];
+            }
+            out[x] = (uint16_t)((((r + 32768U) >> 16) << 11) | (((g + 32768U) >> 16) << 5) | ((b + 32768U) >> 16));
+        }
+    }
+    *out_w = nw;
+    *out_h = nh;
+    *out_size = size;
+    return (uint8_t *)dst;
+}
+
 static bool album_art_show(uint8_t *pixels, uint32_t w, uint32_t h, uint32_t padded, size_t size)
 {
+    uint32_t bw = 0, bh = 0;
+    size_t bsize = 0;
+    uint8_t *big = album_art_enlarge(pixels, w, h, padded, &bw, &bh, &bsize);
+    if (big != NULL) {
+        const album_art_msg_t m = { .pixels = big, .w = bw, .h = bh, .padded = bw, .size = bsize };
+        if (!ui_post(album_art_show_job, &m, sizeof(m))) {
+            heap_caps_free(big);
+            return false;                 /* the caller still owns (and frees) the original */
+        }
+        ESP_LOGI(TAG, "Album art: %ux%u enlarged to %ux%u", (unsigned)w, (unsigned)h,
+                 (unsigned)bw, (unsigned)bh);
+        heap_caps_free(pixels);           /* taken over: the enlarged copy is shown */
+        return true;
+    }
     const album_art_msg_t m = { .pixels = pixels, .w = w, .h = h, .padded = padded, .size = size };
     return ui_post(album_art_show_job, &m, sizeof(m));
 }

@@ -199,8 +199,15 @@ static bool wifi_has_saved_creds(void)
     return ok;
 }
 
-static void wifi_save_creds(const char *ssid, const char *pass)
+typedef struct { const char *ssid, *pass; } wifi_creds_ctx_t;
+
+static void wifi_save_creds_job(void *arg)
 {
+    const wifi_creds_ctx_t *c = (const wifi_creds_ctx_t *)arg;
+    /* copied here first: the caller's strings may be on a PSRAM stack */
+    char ssid[33], pass[65];
+    snprintf(ssid, sizeof(ssid), "%s", c->ssid);
+    snprintf(pass, sizeof(pass), "%s", c->pass != NULL ? c->pass : "");
     nvs_handle_t nvs;
     if (nvs_open(PLAYER_NVS_NAMESPACE, NVS_READWRITE, &nvs) != ESP_OK) return;
     if (nvs_set_str(nvs, WIFI_NVS_SSID, ssid) == ESP_OK &&
@@ -210,8 +217,22 @@ static void wifi_save_creds(const char *ssid, const char *pass)
     nvs_close(nvs);
 }
 
+/* (called from the Library task too, whose stack is in PSRAM) */
+static void wifi_save_creds(const char *ssid, const char *pass)
+{
+    wifi_creds_ctx_t c = { .ssid = ssid, .pass = pass };
+    flash_safe_call(wifi_save_creds_job, &c);
+}
+
+static void wifi_forget_creds_job(void *arg);
 static void wifi_forget_creds(void)
 {
+    flash_safe_call(wifi_forget_creds_job, NULL);
+}
+
+static void wifi_forget_creds_job(void *arg)
+{
+    (void)arg;
     nvs_handle_t nvs;
     if (nvs_open(PLAYER_NVS_NAMESPACE, NVS_READWRITE, &nvs) != ESP_OK) return;
     nvs_erase_key(nvs, WIFI_NVS_SSID);

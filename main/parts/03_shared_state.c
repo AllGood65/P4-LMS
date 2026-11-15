@@ -375,6 +375,12 @@ static void ui_perf_timer_cb(lv_timer_t *t)
                      (unsigned)((ui_perf.panel_us - (ui_perf.panel_flush_us < ui_perf.panel_us ? ui_perf.panel_flush_us : ui_perf.panel_us)) / 1000),
                      (unsigned)(ui_perf.panel_flush_us / 1000), (int)LV_DRAW_SW_DRAW_UNIT_CNT);
         }
+        /* and how close the Wi-Fi link's memory came to running out */
+        ESP_LOGI(TAG, "Memory: internal free %u (lowest so far %u), DMA free %u (lowest so far %u)",
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_DMA),
+                 (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_DMA));
         ui_perf.min_frames = ui_perf.min_sum_us = ui_perf.min_max_us = 0;
     }
 }

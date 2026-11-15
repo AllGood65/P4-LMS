@@ -22,6 +22,7 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_heap_caps.h"
+#include "esp_memory_utils.h"
 #include "esp_codec_dev.h"
 #include "esp_timer.h"
 #ifdef ESP_PLATFORM
@@ -1688,7 +1689,9 @@ void app_main(void)
         );
 
     /* Push updates from Lyrion (falls back to polling if unavailable). */
-    if (xTaskCreate(lms_events_task, "lms_events", 6144, NULL, 4, NULL) != pdPASS) {
+    /* (network only, never the flash chip: its stack can be in PSRAM) */
+    if (xTaskCreatePinnedToCoreWithCaps(lms_events_task, "lms_events", 6144, NULL, 4, NULL,
+                                        tskNO_AFFINITY, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
         ESP_LOGW(TAG, "Push updates unavailable (no memory) - polling instead");
     }
 
@@ -1738,19 +1741,21 @@ void app_main(void)
      * this runs, the interface has used most of the internal RAM, and one day
      * there was no longer a free 32 KB block for it ("Failed to create source
      * browser task" - Library and Queue then did nothing). */
-    static StackType_t source_browser_stack[32768];
-    static StaticTask_t source_browser_tcb;
+    /* Since 2.9 the stack is in PSRAM instead: 32 KB of internal RAM back for
+     * the Wi-Fi link's buffers ("mempool OOM" while a cover grid loaded).
+     * The task never writes to the flash chip itself - the few settings it
+     * saves (Wi-Fi network, Lyrion server) go through flash_safe_call(). */
     BaseType_t source_task_result =
-        xTaskCreateStaticPinnedToCore(
+        xTaskCreatePinnedToCoreWithCaps(
             source_browser_task,
             "source_browser",
-            sizeof(source_browser_stack),
+            32768,
             NULL,
             5,
-            source_browser_stack,
-            &source_browser_tcb,
-            1                /* CPU 1: keeps CPU 0 for the display */
-        ) != NULL ? pdPASS : pdFAIL;
+            NULL,
+            1,               /* CPU 1: keeps CPU 0 for the display */
+            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
+        );
 
     if (source_task_result != pdPASS) {
         ESP_LOGE(

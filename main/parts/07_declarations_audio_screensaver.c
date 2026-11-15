@@ -230,12 +230,72 @@ static uint8_t *album_art_enlarge(const uint8_t *src, uint32_t w, uint32_t h, ui
     return (uint8_t *)dst;
 }
 
+/* ---- Recent covers kept in memory ---------------------------------------
+ * The last few decoded covers (as shown: already enlarged if they needed it)
+ * stay in PSRAM, so going back to a song or a room shows its cover at once
+ * instead of downloading and decoding it again.  About 270 KB each.  Used
+ * only by the album-art task (08_now_playing.c). */
+#define ALBUM_ART_CACHE_N 8
+static struct {
+    char     key[256];
+    uint8_t *px;
+    uint32_t w, h, padded;
+    size_t   size;
+    uint32_t used;                    /* when last shown, for dropping the oldest */
+} album_art_cache[ALBUM_ART_CACHE_N];
+static char album_art_cache_store_key[256] = "";   /* set while fetching a cover worth keeping */
+
+static void album_art_cache_put(const uint8_t *px, uint32_t w, uint32_t h, uint32_t padded, size_t size)
+{
+    if (album_art_cache_store_key[0] == '\0') return;
+    int slot = 0;
+    for (int i = 0; i < ALBUM_ART_CACHE_N; i++) {
+        if (strcmp(album_art_cache[i].key, album_art_cache_store_key) == 0) { slot = i; break; }
+        if (album_art_cache[i].used < album_art_cache[slot].used) slot = i;
+    }
+    uint8_t *copy = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (copy == NULL) return;
+    memcpy(copy, px, size);
+    heap_caps_free(album_art_cache[slot].px);
+    album_art_cache[slot].px = copy;
+    album_art_cache[slot].w = w;
+    album_art_cache[slot].h = h;
+    album_art_cache[slot].padded = padded;
+    album_art_cache[slot].size = size;
+    album_art_cache[slot].used = esp_log_timestamp() | 1U;
+    snprintf(album_art_cache[slot].key, sizeof(album_art_cache[slot].key), "%s", album_art_cache_store_key);
+}
+
+/* Show a kept cover for this key; false if there isn't one. */
+static void album_art_show_job(void *arg);
+static bool album_art_cache_show(const char *key)
+{
+    for (int i = 0; i < ALBUM_ART_CACHE_N; i++) {
+        if (album_art_cache[i].px == NULL || strcmp(album_art_cache[i].key, key) != 0) continue;
+        uint8_t *copy = heap_caps_malloc(album_art_cache[i].size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (copy == NULL) return false;
+        memcpy(copy, album_art_cache[i].px, album_art_cache[i].size);
+        const album_art_msg_t m = { .pixels = copy, .w = album_art_cache[i].w, .h = album_art_cache[i].h,
+                                    .padded = album_art_cache[i].padded, .size = album_art_cache[i].size };
+        if (!ui_post(album_art_show_job, &m, sizeof(m))) {
+            heap_caps_free(copy);
+            return false;
+        }
+        album_art_cache[i].used = esp_log_timestamp() | 1U;
+        ESP_LOGI(TAG, "Album art: shown from memory");
+        return true;
+    }
+    return false;
+}
+
 static bool album_art_show(uint8_t *pixels, uint32_t w, uint32_t h, uint32_t padded, size_t size)
 {
     uint32_t bw = 0, bh = 0;
     size_t bsize = 0;
     uint8_t *big = album_art_enlarge(pixels, w, h, padded, &bw, &bh, &bsize);
     if (big != NULL) {
+        /* kept before handing over: once posted, the display task owns it */
+        album_art_cache_put(big, bw, bh, bw, bsize);
         const album_art_msg_t m = { .pixels = big, .w = bw, .h = bh, .padded = bw, .size = bsize };
         if (!ui_post(album_art_show_job, &m, sizeof(m))) {
             heap_caps_free(big);
@@ -247,6 +307,7 @@ static bool album_art_show(uint8_t *pixels, uint32_t w, uint32_t h, uint32_t pad
         return true;
     }
     const album_art_msg_t m = { .pixels = pixels, .w = w, .h = h, .padded = padded, .size = size };
+    album_art_cache_put(pixels, w, h, padded, size);       /* before: once posted, it isn't ours */
     return ui_post(album_art_show_job, &m, sizeof(m));
 }
 
@@ -693,6 +754,7 @@ static int screensaver_paused_view(void)
         case 2:  return SS_VIEW_ANALOG;
         case 3:  return SS_VIEW_WALL;
         case 4:  return SS_VIEW_WEATHER;
+        case 5:  return ss_have_track ? SS_VIEW_ART : SS_VIEW_CLOCK;   /* the big cover, as while playing */
         default: return SS_VIEW_CLOCK;
     }
 }

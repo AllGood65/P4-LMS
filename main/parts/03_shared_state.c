@@ -317,12 +317,28 @@ static struct {
     uint32_t min_frames, min_sum_us, min_max_us;   /* this minute, for the log */
     bool     panel_pending;              /* the next frame draws a newly shown panel */
     uint32_t panel_us;                   /* how long that took last time (0 = not measured) */
+    int64_t  t_flush;                    /* start of the current hand-over to the screen */
+    uint32_t frame_flush_us;             /* this frame: time spent handing it to the screen */
+    uint32_t panel_flush_us;             /* ...of panel_us (the rest is drawing) */
 } ui_perf;
 
 static void ui_perf_event_cb(lv_event_t *e)
 {
-    if (lv_event_get_code(e) == LV_EVENT_RENDER_START) {
+    const lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_RENDER_START) {
         ui_perf.t_start = esp_timer_get_time();
+        ui_perf.frame_flush_us = 0;
+        return;
+    }
+    /* The hand-over to the screen (the 180-degree turn and copy into the
+     * frame buffers) is timed apart from the drawing itself. */
+    if (code == LV_EVENT_FLUSH_START || code == LV_EVENT_FLUSH_WAIT_START) {
+        ui_perf.t_flush = esp_timer_get_time();
+        return;
+    }
+    if (code == LV_EVENT_FLUSH_FINISH || code == LV_EVENT_FLUSH_WAIT_FINISH) {
+        if (ui_perf.t_flush != 0) ui_perf.frame_flush_us += (uint32_t)(esp_timer_get_time() - ui_perf.t_flush);
+        ui_perf.t_flush = 0;
         return;
     }
     const uint32_t us = (uint32_t)(esp_timer_get_time() - ui_perf.t_start);
@@ -332,6 +348,7 @@ static void ui_perf_event_cb(lv_event_t *e)
     if (ui_perf.panel_pending) {
         ui_perf.panel_pending = false;
         ui_perf.panel_us = us;
+        ui_perf.panel_flush_us = ui_perf.frame_flush_us;
     }
 }
 
@@ -349,11 +366,14 @@ static void ui_perf_timer_cb(lv_timer_t *t)
     if (++seconds >= 60) {
         seconds = 0;
         if (ui_perf.min_frames > 0) {
-            ESP_LOGI(TAG, "Screen: %u frames this minute, %u.%u ms each on average, slowest %u ms; a full panel takes %u ms",
+            ESP_LOGI(TAG, "Screen: %u frames this minute, %u.%u ms each on average, slowest %u ms; "
+                     "a full panel takes %u ms (drawing %u, sending to the screen %u; %d drawing threads)",
                      (unsigned)ui_perf.min_frames,
                      (unsigned)(ui_perf.min_sum_us / ui_perf.min_frames / 1000),
                      (unsigned)(ui_perf.min_sum_us / ui_perf.min_frames % 1000 / 100),
-                     (unsigned)(ui_perf.min_max_us / 1000), (unsigned)(ui_perf.panel_us / 1000));
+                     (unsigned)(ui_perf.min_max_us / 1000), (unsigned)(ui_perf.panel_us / 1000),
+                     (unsigned)((ui_perf.panel_us - (ui_perf.panel_flush_us < ui_perf.panel_us ? ui_perf.panel_flush_us : ui_perf.panel_us)) / 1000),
+                     (unsigned)(ui_perf.panel_flush_us / 1000), (int)LV_DRAW_SW_DRAW_UNIT_CNT);
         }
         ui_perf.min_frames = ui_perf.min_sum_us = ui_perf.min_max_us = 0;
     }
@@ -364,6 +384,10 @@ static void ui_perf_start(lv_display_t *display)
 {
     lv_display_add_event_cb(display, ui_perf_event_cb, LV_EVENT_RENDER_START, NULL);
     lv_display_add_event_cb(display, ui_perf_event_cb, LV_EVENT_RENDER_READY, NULL);
+    lv_display_add_event_cb(display, ui_perf_event_cb, LV_EVENT_FLUSH_START, NULL);
+    lv_display_add_event_cb(display, ui_perf_event_cb, LV_EVENT_FLUSH_FINISH, NULL);
+    lv_display_add_event_cb(display, ui_perf_event_cb, LV_EVENT_FLUSH_WAIT_START, NULL);
+    lv_display_add_event_cb(display, ui_perf_event_cb, LV_EVENT_FLUSH_WAIT_FINISH, NULL);
     lv_timer_create(ui_perf_timer_cb, 1000, NULL);
 }
 

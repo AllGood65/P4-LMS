@@ -1287,8 +1287,8 @@ static void hub_refresh_locked(void)
     snprintf(t, sizeof(t), "%s / %s  " LV_SYMBOL_BULLET "  %u min",
              (ss_play_mode >= 0 && ss_play_mode < 5)
              ? (const char *const[]){ "Off", "Album art", "Cover wall", "Big text", "VU meters" }[ss_play_mode] : "Off",
-             (ss_pause_mode >= 0 && ss_pause_mode < 5)
-             ? (const char *const[]){ "Clock", "Clock + cover", "Analog clock", "Cover wall", "Weather" }[ss_pause_mode] : "Clock",
+             (ss_pause_mode >= 0 && ss_pause_mode < 6)
+             ? (const char *const[]){ "Clock", "Clock + cover", "Analog clock", "Cover wall", "Weather", "Album art" }[ss_pause_mode] : "Clock",
              (unsigned)ss_timeout_min);
     lv_label_set_text(hub_subtitles[4], t);
     snprintf(t, sizeof(t), "Wake-up music for %s",

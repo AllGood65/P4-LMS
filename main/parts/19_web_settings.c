@@ -111,7 +111,7 @@ static void web_settings_load(void)
     if (nvs_get_u8(nvs, WEB_NVS_BL_SB, &v) == ESP_OK && v >= 1 && v <= 100) bl_standby_pct = v;
     if (nvs_get_u8(nvs, WEB_NVS_BL_DP, &v) == ESP_OK && v >= 1 && v <= 100) bl_deep_pct = v;
     if (nvs_get_u8(nvs, WEB_NVS_SS_PM, &v) == ESP_OK && v <= 4) ss_play_mode = v;
-    if (nvs_get_u8(nvs, WEB_NVS_SS_PS, &v) == ESP_OK && v <= 4) ss_pause_mode = v;
+    if (nvs_get_u8(nvs, WEB_NVS_SS_PS, &v) == ESP_OK && v <= 5) ss_pause_mode = v;
     if (nvs_get_u8(nvs, WEB_NVS_BL_ART, &v) == ESP_OK && v >= 1 && v <= 100) bl_art_pct = v;
     if (nvs_get_u8(nvs, WEB_NVS_NP_DIM, &v) == ESP_OK && v <= 120) np_dim_min = v;
     if (nvs_get_u8(nvs, WEB_NVS_SS_NET, &v) == ESP_OK && v <= 24) ss_net_hours = v;
@@ -888,14 +888,15 @@ static esp_err_t web_send_page(httpd_req_t *req, const char *notice, bool notice
                 "<option value='1'%s>Clock + cover</option>"
                 "<option value='2'%s>Analog clock</option>"
                 "<option value='3'%s>Cover wall</option>"
-                "<option value='4'%s>Weather</option></select></div>"
+                "<option value='4'%s>Weather</option>"
+                "<option value='5'%s>Album art</option></select></div>"
                 "</div>",
             ss_play_mode == 0 ? " selected" : "", ss_play_mode == 1 ? " selected" : "",
             ss_play_mode == 2 ? " selected" : "", ss_play_mode == 3 ? " selected" : "",
             ss_play_mode == 4 ? " selected" : "",
             ss_pause_mode == 0 ? " selected" : "", ss_pause_mode == 1 ? " selected" : "",
             ss_pause_mode == 2 ? " selected" : "", ss_pause_mode == 3 ? " selected" : "",
-            ss_pause_mode == 4 ? " selected" : "");
+            ss_pause_mode == 4 ? " selected" : "", ss_pause_mode == 5 ? " selected" : "");
 
     /* clock and weather (for the clock and Weather screensavers) */
     web_add(&o, "<h3>Clock &amp; weather</h3><div class='row'>"
@@ -1209,7 +1210,7 @@ static esp_err_t web_post_save(httpd_req_t *req)
     web_field(body, "bl_sb", v, sizeof(v));  bl_standby_pct = web_clamp_int(v, 1, 100, bl_standby_pct);
     web_field(body, "bl_dp", v, sizeof(v));  bl_deep_pct    = web_clamp_int(v, 1, 100, bl_deep_pct);
     web_field(body, "ss_pm", v, sizeof(v));  ss_play_mode   = web_clamp_int(v, 0, 4, ss_play_mode);
-    web_field(body, "ss_ps", v, sizeof(v));  ss_pause_mode  = web_clamp_int(v, 0, 4, ss_pause_mode);
+    web_field(body, "ss_ps", v, sizeof(v));  ss_pause_mode  = web_clamp_int(v, 0, 5, ss_pause_mode);
     web_field(body, "bl_art", v, sizeof(v)); bl_art_pct     = web_clamp_int(v, 1, 100, bl_art_pct);
     web_field(body, "np_dim", v, sizeof(v)); if (v[0]) np_dim_min = (uint32_t)web_clamp_int(v, 0, 120, (int)np_dim_min);
     web_field(body, "ss_net", v, sizeof(v)); if (v[0]) ss_net_hours = (uint32_t)web_clamp_int(v, 0, 24, (int)ss_net_hours);

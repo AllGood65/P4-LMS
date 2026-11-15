@@ -15,7 +15,7 @@ static volatile uint32_t ss_deep_min    = 30;    /* standby -> deep dim    */
 static volatile int      bl_standby_pct = 15;
 static volatile int      bl_deep_pct    = 10;
 static volatile int      ss_play_mode   = 1;     /* while playing: 0 stay on Now Playing, 1 album art, 2 cover wall */
-static volatile int      ss_pause_mode  = 1;     /* paused/stopped: 0 clock, 1 clock + cover, 2 analog, 3 cover wall */
+static volatile int      ss_pause_mode  = 1;     /* paused/stopped: 0 clock, 1 clock + cover, 2 analog, 3 cover wall, 4 weather, 5 album art */
 static volatile int      bl_art_pct     = 60;    /* album art view brightness                         */
 /* Screen care while nothing covers Now Playing during music ("Off", or the
  * VU meters open): dim to the "while playing" brightness after np_dim_min

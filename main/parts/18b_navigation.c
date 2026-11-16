@@ -697,6 +697,9 @@ static lv_obj_t *nav_panel_create(lv_obj_t *screen, const char *title_text,
     lv_obj_t *p = lv_obj_create(screen);
     lv_obj_remove_style_all(p);
     lv_obj_set_size(p, PANEL_W, PANEL_H);
+    /* the coloured trim is drawn after (on top of) the panel's contents,
+     * so a list or bar reaching the edge never hides it */
+    lv_obj_set_style_border_post(p, true, 0);
     lv_obj_set_pos(p, PANEL_X, PANEL_Y);
     lv_obj_set_style_bg_color(p, lv_color_hex(UI_PANEL), 0);
     lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);

@@ -462,6 +462,9 @@ static void wifi_create(void)
     wifi_overlay = lv_obj_create(lv_screen_active());
     lv_obj_remove_style_all(wifi_overlay);
     lv_obj_set_size(wifi_overlay, PANEL_W, PANEL_H);
+    /* the coloured trim is drawn after (on top of) the panel's contents,
+     * so a list or bar reaching the edge never hides it */
+    lv_obj_set_style_border_post(wifi_overlay, true, 0);
     lv_obj_set_pos(wifi_overlay, PANEL_X, PANEL_Y);
     lv_obj_set_style_bg_color(wifi_overlay, lv_color_hex(UI_PANEL), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(wifi_overlay, LV_OPA_COVER, LV_PART_MAIN);

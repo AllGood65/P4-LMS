@@ -295,6 +295,9 @@ static void create_settings(lv_obj_t *screen)
     settings_overlay = lv_obj_create(screen);
     lv_obj_remove_style_all(settings_overlay);
     lv_obj_set_size(settings_overlay, PANEL_W, PANEL_H);
+    /* the coloured trim is drawn after (on top of) the panel's contents,
+     * so a list or bar reaching the edge never hides it */
+    lv_obj_set_style_border_post(settings_overlay, true, 0);
     lv_obj_set_pos(settings_overlay, PANEL_X, PANEL_Y);
     lv_obj_set_style_bg_color(settings_overlay, lv_color_hex(UI_PANEL), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(settings_overlay, LV_OPA_COVER, LV_PART_MAIN);

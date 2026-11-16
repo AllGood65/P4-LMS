@@ -856,7 +856,8 @@ static void source_select_create(lv_obj_t *nav_bar)
 
     source_select_bar = lv_obj_create(nav_bar);
     lv_obj_remove_style_all(source_select_bar);
-    lv_obj_set_size(source_select_bar, 930, 76);
+    lv_obj_set_size(source_select_bar, PANEL_W - 4, 76);
+    lv_obj_set_style_radius(source_select_bar, 14, 0);
     lv_obj_set_pos(source_select_bar, 0, 1);
     lv_obj_set_style_bg_color(source_select_bar, lv_color_hex(UI_PANEL), 0);
     lv_obj_set_style_bg_opa(source_select_bar, LV_OPA_COVER, 0);

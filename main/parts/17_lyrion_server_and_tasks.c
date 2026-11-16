@@ -259,6 +259,9 @@ static void lms_create(void)
     lms_overlay = lv_obj_create(lv_screen_active());
     lv_obj_remove_style_all(lms_overlay);
     lv_obj_set_size(lms_overlay, PANEL_W, PANEL_H);
+    /* the coloured trim is drawn after (on top of) the panel's contents,
+     * so a list or bar reaching the edge never hides it */
+    lv_obj_set_style_border_post(lms_overlay, true, 0);
     lv_obj_set_pos(lms_overlay, PANEL_X, PANEL_Y);
     lv_obj_set_style_bg_color(lms_overlay, lv_color_hex(UI_PANEL), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(lms_overlay, LV_OPA_COVER, LV_PART_MAIN);
@@ -633,6 +636,9 @@ static void create_source_browser(lv_obj_t *screen)
     source_overlay = lv_obj_create(screen);
     lv_obj_remove_style_all(source_overlay);
     lv_obj_set_size(source_overlay, PANEL_W, PANEL_H);
+    /* the coloured trim is drawn after (on top of) the panel's contents,
+     * so a list or bar reaching the edge never hides it */
+    lv_obj_set_style_border_post(source_overlay, true, 0);
     lv_obj_set_pos(source_overlay, PANEL_X, PANEL_Y);
     lv_obj_set_style_bg_color(source_overlay, lv_color_hex(UI_PANEL), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(source_overlay, LV_OPA_COVER, LV_PART_MAIN);
@@ -763,7 +769,10 @@ static void create_source_browser(lv_obj_t *screen)
      * in the foreground so no item button can appear underneath it. */
     source_nav_bar = lv_obj_create(source_overlay);
     lv_obj_remove_style_all(source_nav_bar);
-    lv_obj_set_size(source_nav_bar, 930, 78);
+    /* inside the panel's 2 px trim, rounded like its bottom corners (the bar
+     * is the panel's colour, so the rounded top corners don't show) */
+    lv_obj_set_size(source_nav_bar, PANEL_W - 4, 78);
+    lv_obj_set_style_radius(source_nav_bar, 14, LV_PART_MAIN);
     lv_obj_set_pos(source_nav_bar, 0, PANEL_H - 82);
     lv_obj_set_style_bg_color(source_nav_bar, lv_color_hex(UI_PANEL), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(source_nav_bar, LV_OPA_COVER, LV_PART_MAIN);

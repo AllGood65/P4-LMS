@@ -22,9 +22,10 @@ static const uint8_t theme_display_order[] = {
     16, 17,                             /* RECEIVER BLUE, BLUE METERS (hi-fi inspired)  */
     7, 8, 9, 10, 11, 12, 13, 14, 15,    /* VINTAGE ... ROSE GOLD (multi-colour)        */
     18, 19, 20,                         /* PATINA, COCOA, CYBER                         */
+    21, 22, 23, 24, 25,                 /* MIDNIGHT, OBSIDIAN, EMBER, AURORA, GRAPHITE  */
     1, 2, 3, 4, 5, 6                    /* ICE, TEAL, PHOSPHOR, SYNTH, MONO, NIGHT      */
 };
-_Static_assert(sizeof(theme_display_order) == 21, "theme_display_order must list every theme once");
+_Static_assert(sizeof(theme_display_order) == 26, "theme_display_order must list every theme once");
 static bool      theme_applying = false;
 
 /* Read the saved theme (called once, before any screen is built). */

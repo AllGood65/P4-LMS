@@ -714,10 +714,13 @@ static void create_source_browser(lv_obj_t *screen)
 
     source_detail_album_label = lv_label_create(source_overlay);
     lv_label_set_text(source_detail_album_label, "");
-    lv_obj_set_size(source_detail_album_label, 220, 68);      /* two lines, then "..." */
+    /* up to three lines, then "..." (in the 28 px font only ONE line fitted
+     * the space, so most album names were cut short; the full name is also
+     * in the title above) */
+    lv_obj_set_size(source_detail_album_label, 220, 70);
     lv_label_set_long_mode(source_detail_album_label, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_color(source_detail_album_label, lv_color_hex(UI_TEXT), 0);
-    lv_obj_set_style_text_font(source_detail_album_label, &p4_font_28, 0);
+    lv_obj_set_style_text_font(source_detail_album_label, &p4_font_18, 0);
     lv_obj_set_style_text_align(source_detail_album_label, LV_TEXT_ALIGN_LEFT, 0);
     lv_obj_set_pos(source_detail_album_label, 30, 130);
     lv_obj_add_flag(source_detail_album_label, LV_OBJ_FLAG_HIDDEN);

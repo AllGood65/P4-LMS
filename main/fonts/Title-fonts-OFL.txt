@@ -1,0 +1,8 @@
+Theme title fonts (main/fonts/p4_title_*.c), converted with lv_font_conv:
+
+  p4_title_deco   Poiret One            Copyright 2011 The Poiret One Project Authors
+  p4_title_brass  Cinzel (Bold)         Copyright 2020 The Cinzel Project Authors
+  p4_title_neon   Josefin Sans (SemiBold) Copyright 2010 The Josefin Sans Project Authors
+
+All three are licensed under the SIL Open Font License, Version 1.1
+(https://openfontlicense.org).  Source: https://github.com/google/fonts

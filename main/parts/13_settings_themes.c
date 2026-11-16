@@ -21,30 +21,28 @@ static const uint8_t theme_display_order[] = {
     0,                                  /* AMBER                                        */
     16, 17,                             /* RECEIVER BLUE, BLUE METERS (hi-fi inspired)  */
     7, 8, 9, 10, 11, 12, 13, 14, 15,    /* VINTAGE ... ROSE GOLD (multi-colour)        */
-    21,                                 /* COVER COLOURS (follows the album art)        */
     18, 19, 20,                         /* PATINA, COCOA, CYBER                         */
     1, 2, 3, 4, 5, 6                    /* ICE, TEAL, PHOSPHOR, SYNTH, MONO, NIGHT      */
 };
-_Static_assert(sizeof(theme_display_order) == 22, "theme_display_order must list every theme once");
+_Static_assert(sizeof(theme_display_order) == 21, "theme_display_order must list every theme once");
 static bool      theme_applying = false;
 
 /* Read the saved theme (called once, before any screen is built). */
-static void cover_theme_init(void);   /* 13b_cover_theme.c */
 static void ui_theme_load(void)
 {
     nvs_handle_t nvs;
     uint8_t value = 0;
-    esp_err_t ret = ESP_FAIL;
 
-    if (nvs_open(PLAYER_NVS_NAMESPACE, NVS_READONLY, &nvs) == ESP_OK) {
-        ret = nvs_get_u8(nvs, THEME_NVS_KEY, &value);
-        nvs_close(nvs);
+    if (nvs_open(PLAYER_NVS_NAMESPACE, NVS_READONLY, &nvs) != ESP_OK) {
+        return;
     }
-    ui_theme_index = (ret == ESP_OK && (int)value < UI_THEME_COUNT) ? (int)value : 0;
-    ui_theme_live = ui_themes[ui_theme_index];
-    ui_theme = &ui_theme_live;
-    if (ui_theme_index == UI_THEME_COVER) cover_theme_init();   /* its starting colours */
-    ESP_LOGI(TAG, "Theme: %s", ui_theme->name);
+    esp_err_t ret = nvs_get_u8(nvs, THEME_NVS_KEY, &value);
+    nvs_close(nvs);
+
+    if (ret == ESP_OK && (int)value < UI_THEME_COUNT) {
+        ui_theme = &ui_themes[value];
+        ESP_LOGI(TAG, "Theme: %s", ui_theme->name);
+    }
 }
 
 static bool ui_theme_save(int index)
@@ -104,10 +102,10 @@ static void theme_card_draw_cb(lv_event_t *e)
         lv_draw_rect_dsc_init(&dsc);
         dsc.bg_color = lv_color_hex(swatch[k]);
         dsc.bg_opa = LV_OPA_COVER;
-        dsc.radius = 7;
+        dsc.radius = ui_looks[t->look < UI_LOOK_COUNT ? t->look : 0].radius_cap < 7 ? 1 : 7;
         lv_area_t a;
         a.x1 = card.x1 + 18 + k * 30;
-        a.y1 = card.y1 + 30;
+        a.y1 = card.y1 + 48;
         a.x2 = a.x1 + 23;
         a.y2 = a.y1 + 23;
         lv_draw_rect(layer, &dsc, &a);
@@ -159,7 +157,7 @@ static void settings_build_cards(void)
     for (int pos = 0; pos < UI_THEME_COUNT; pos++) {
         const int i = theme_display_order[pos];
         const ui_theme_t *t = &ui_themes[i];
-        const bool current = (i == ui_theme_index);
+        const bool current = (t == ui_theme);
 
         lv_obj_t *btn = lv_obj_create(settings_list);
         lv_obj_remove_style_all(btn);
@@ -167,7 +165,9 @@ static void settings_build_cards(void)
         lv_obj_set_pos(btn, 10 + (pos % 2) * 445, 6 + (pos / 2) * 96);
         lv_obj_set_style_bg_color(btn, lv_color_hex(t->panel_alt), 0);
         lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(btn, 12, 0);
+        /* each card shows its theme's own style: corners and title lettering */
+        const ui_look_t *look = &ui_looks[t->look < UI_LOOK_COUNT ? t->look : 0];
+        lv_obj_set_style_radius(btn, look->radius_cap < 12 ? look->radius_cap : 12, 0);
         lv_obj_set_style_border_width(btn, current ? 4 : 2, 0);
         lv_obj_set_style_border_color(btn, lv_color_hex(current ? t->accent_glow : t->amber), 0);
         lv_obj_set_style_bg_color(btn, lv_color_hex(t->button), LV_STATE_PRESSED);
@@ -184,14 +184,14 @@ static void settings_build_cards(void)
         snprintf(text, sizeof(text), "%s%s", current ? LV_SYMBOL_OK "  " : "", t->name);
         lv_label_set_text(name, text);
         lv_obj_set_style_text_color(name, lv_color_hex(t->text), 0);
-        /* Longer names ("RECEIVER BLUE", "BLUE METERS") get a smaller font so
-         * they stay inside the card instead of running past its right edge. */
-        lv_obj_set_style_text_font(name,
-            strlen(t->name) > 9 ? &p4_font_18 : &p4_font_28, 0);
-        lv_obj_set_width(name, 425 - 190 - 12);
+        /* The name across the top in the theme's title lettering, all at the
+         * same size; the colour swatches go underneath it. */
+        lv_obj_set_style_text_font(name, ui_title_font_for(t->look), 0);
+        lv_obj_set_style_text_letter_space(name, look->title_space, 0);
+        lv_obj_set_width(name, 425 - 36);
         lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
         label_one_line(name);
-        lv_obj_align(name, LV_ALIGN_LEFT_MID, 190, 0);
+        lv_obj_align(name, LV_ALIGN_TOP_LEFT, 18, 6);
     }
     lvgl_mem_log("theme cards");
 }
@@ -268,7 +268,7 @@ static void theme_button_event_cb(lv_event_t *e)
     const int index = (int)(intptr_t)lv_event_get_user_data(e);
     if (index < 0 || index >= UI_THEME_COUNT) return;
 
-    if (index == ui_theme_index) {            /* already the active theme */
+    if (&ui_themes[index] == ui_theme) {      /* already the active theme */
         settings_hide();
         return;
     }
@@ -305,7 +305,8 @@ static void create_settings(lv_obj_t *screen)
     lv_obj_set_style_bg_opa(settings_overlay, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(settings_overlay, 2, LV_PART_MAIN);
     lv_obj_set_style_border_color(settings_overlay, lv_color_hex(UI_AMBER), LV_PART_MAIN);
-    lv_obj_set_style_radius(settings_overlay, 16, LV_PART_MAIN);
+    ui_frame(settings_overlay, UI_AMBER, 2);
+    lv_obj_set_style_radius(settings_overlay, UI_R(16), LV_PART_MAIN);
     lv_obj_clear_flag(settings_overlay, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(settings_overlay, LV_OBJ_FLAG_CLICKABLE);      /* swallow stray touches */
 
@@ -313,6 +314,7 @@ static void create_settings(lv_obj_t *screen)
     lv_label_set_text(title, "SETTINGS  -  COLOUR THEME");
     lv_obj_set_style_text_color(title, lv_color_hex(UI_TEXT), 0);
     lv_obj_set_style_text_font(title, &p4_font_28, 0);
+    ui_title(title);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 30, 20);
 
     lv_obj_t *rule = lv_obj_create(settings_overlay);
@@ -340,7 +342,7 @@ static void create_settings(lv_obj_t *screen)
     lv_obj_set_style_bg_color(settings_list, lv_color_hex(UI_ACCENT), LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_opa(settings_list, LV_OPA_70, LV_PART_SCROLLBAR);
     lv_obj_set_style_width(settings_list, 6, LV_PART_SCROLLBAR);
-    lv_obj_set_style_radius(settings_list, 3, LV_PART_SCROLLBAR);
+    lv_obj_set_style_radius(settings_list, UI_R(3), LV_PART_SCROLLBAR);
 
     /* The theme cards are built when SETTINGS is opened and removed again when it
      * closes, so they cost no LVGL memory while the display is just playing music. */

@@ -192,7 +192,7 @@ static void lms_rebuild_list_locked(void)
         lv_obj_set_pos(row, 6, 4 + i * 64);
         lv_obj_set_style_bg_color(row, lv_color_hex(current ? UI_ACCENT_DARK : UI_BUTTON), 0);
         lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(row, 10, 0);
+        lv_obj_set_style_radius(row, UI_R(10), 0);
         lv_obj_set_style_border_width(row, current ? 2 : 1, 0);
         lv_obj_set_style_border_color(row, lv_color_hex(current ? UI_ACCENT_GLOW : UI_EDGE), 0);
         lv_obj_set_style_bg_color(row, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
@@ -267,7 +267,8 @@ static void lms_create(void)
     lv_obj_set_style_bg_opa(lms_overlay, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(lms_overlay, 2, LV_PART_MAIN);
     lv_obj_set_style_border_color(lms_overlay, lv_color_hex(UI_AMBER), LV_PART_MAIN);
-    lv_obj_set_style_radius(lms_overlay, 16, LV_PART_MAIN);
+    ui_frame(lms_overlay, UI_AMBER, 2);
+    lv_obj_set_style_radius(lms_overlay, UI_R(16), LV_PART_MAIN);
     lv_obj_clear_flag(lms_overlay, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(lms_overlay, LV_OBJ_FLAG_CLICKABLE);
 
@@ -275,6 +276,7 @@ static void lms_create(void)
     lv_label_set_text(title, "LYRION SERVER");
     lv_obj_set_style_text_color(title, lv_color_hex(UI_TEXT), 0);
     lv_obj_set_style_text_font(title, &p4_font_28, 0);
+    ui_title(title);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 30, 20);
 
     lv_obj_t *close = create_button(lms_overlay, "CLOSE", 150, 50);
@@ -644,7 +646,8 @@ static void create_source_browser(lv_obj_t *screen)
     lv_obj_set_style_bg_opa(source_overlay, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(source_overlay, 2, LV_PART_MAIN);
     lv_obj_set_style_border_color(source_overlay, lv_color_hex(UI_AMBER), LV_PART_MAIN);
-    lv_obj_set_style_radius(source_overlay, 16, LV_PART_MAIN);
+    ui_frame(source_overlay, UI_AMBER, 2);
+    lv_obj_set_style_radius(source_overlay, UI_R(16), LV_PART_MAIN);
     lv_obj_clear_flag(source_overlay, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(source_overlay, LV_OBJ_FLAG_HIDDEN);
 
@@ -686,6 +689,7 @@ static void create_source_browser(lv_obj_t *screen)
     lv_label_set_text(source_title_label, "LIBRARY");
     lv_obj_set_style_text_color(source_title_label, lv_color_hex(UI_TEXT), 0);
     lv_obj_set_style_text_font(source_title_label, &p4_font_28, 0);
+    ui_title(source_title_label);
     /* Long album names end in "..." instead of running under BACK/CLOSE. */
     lv_obj_set_width(source_title_label, 600);      /* leaves room for the loading spinner */
     lv_label_set_long_mode(source_title_label, LV_LABEL_LONG_DOT);
@@ -772,7 +776,7 @@ static void create_source_browser(lv_obj_t *screen)
     /* inside the panel's 2 px trim, rounded like its bottom corners (the bar
      * is the panel's colour, so the rounded top corners don't show) */
     lv_obj_set_size(source_nav_bar, PANEL_W - 4, 78);
-    lv_obj_set_style_radius(source_nav_bar, 14, LV_PART_MAIN);
+    lv_obj_set_style_radius(source_nav_bar, UI_R(14), LV_PART_MAIN);
     lv_obj_set_pos(source_nav_bar, 0, PANEL_H - 82);
     lv_obj_set_style_bg_color(source_nav_bar, lv_color_hex(UI_PANEL), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(source_nav_bar, LV_OPA_COVER, LV_PART_MAIN);

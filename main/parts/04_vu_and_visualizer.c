@@ -278,7 +278,7 @@ static void vu_off_cover_create(lv_obj_t *panel)
     lv_obj_set_size(vu_off_cover, lv_pct(100), lv_pct(100));
     lv_obj_set_style_bg_color(vu_off_cover, lv_color_hex(UI_PANEL_ALT), 0);
     lv_obj_set_style_bg_opa(vu_off_cover, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(vu_off_cover, 4, 0);
+    lv_obj_set_style_radius(vu_off_cover, UI_R(4), 0);
     lv_obj_center(vu_off_cover);
     lv_obj_clear_flag(vu_off_cover, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(vu_off_cover, LV_OBJ_FLAG_EVENT_BUBBLE);      /* the tap reaches the panel */
@@ -1776,6 +1776,7 @@ static void create_visualizer(lv_obj_t *screen)
     lv_label_set_text(title, "P4-LMS  \xE2\x80\xA2  MUSIC VISUALIZER");
     lv_obj_set_style_text_color(title, lv_color_hex(UI_ACCENT_GLOW), 0);
     lv_obj_set_style_text_font(title, &p4_font_28, 0);
+    ui_title(title);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 34, 22);
 
     /* What is playing, so the full-screen view never hides the track. */
@@ -1801,7 +1802,7 @@ static void create_visualizer(lv_obj_t *screen)
     lv_obj_align(chip, LV_ALIGN_BOTTOM_MID, -80, -14);
     lv_obj_set_style_bg_color(chip, lv_color_hex(UI_BUTTON), 0);
     lv_obj_set_style_bg_opa(chip, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(chip, 10, 0);
+    lv_obj_set_style_radius(chip, UI_R(10), 0);
     lv_obj_set_style_border_width(chip, 1, 0);
     lv_obj_set_style_border_color(chip, lv_color_hex(UI_EDGE), 0);
     lv_obj_set_style_bg_color(chip, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
@@ -1817,7 +1818,7 @@ static void create_visualizer(lv_obj_t *screen)
     lv_obj_align(prev_chip, LV_ALIGN_BOTTOM_MID, -285, -14);
     lv_obj_set_style_bg_color(prev_chip, lv_color_hex(UI_BUTTON), 0);
     lv_obj_set_style_bg_opa(prev_chip, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(prev_chip, 10, 0);
+    lv_obj_set_style_radius(prev_chip, UI_R(10), 0);
     lv_obj_set_style_border_width(prev_chip, 1, 0);
     lv_obj_set_style_border_color(prev_chip, lv_color_hex(UI_EDGE), 0);
     lv_obj_set_style_bg_color(prev_chip, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
@@ -1844,7 +1845,7 @@ static void create_visualizer(lv_obj_t *screen)
     lv_obj_align(color_chip, LV_ALIGN_BOTTOM_MID, 150, -14);
     lv_obj_set_style_bg_color(color_chip, lv_color_hex(UI_BUTTON), 0);
     lv_obj_set_style_bg_opa(color_chip, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(color_chip, 10, 0);
+    lv_obj_set_style_radius(color_chip, UI_R(10), 0);
     lv_obj_set_style_border_width(color_chip, 1, 0);
     lv_obj_set_style_border_color(color_chip, lv_color_hex(UI_EDGE), 0);
     lv_obj_set_style_bg_color(color_chip, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);

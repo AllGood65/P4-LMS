@@ -108,7 +108,7 @@ static void toast_create(lv_obj_t *screen)
     lv_obj_set_style_pad_hor(toast, 22, 0);
     lv_obj_set_style_bg_color(toast, lv_color_hex(UI_TEXT), 0);
     lv_obj_set_style_bg_opa(toast, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(toast, 21, 0);
+    lv_obj_set_style_radius(toast, UI_R(21), 0);
     lv_obj_clear_flag(toast, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_align(toast, LV_ALIGN_BOTTOM_MID, 0, -(NAV_BAR_H + 14));
     toast_label = lv_label_create(toast);
@@ -367,7 +367,7 @@ static void sleep_chip_create(lv_obj_t *header)
     lv_obj_set_size(sleep_chip, 170, 40);
     lv_obj_align(sleep_chip, LV_ALIGN_LEFT_MID, 616, 0);        /* between the clock and Wi-Fi */
     lv_obj_set_style_bg_opa(sleep_chip, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(sleep_chip, 20, 0);
+    lv_obj_set_style_radius(sleep_chip, UI_R(20), 0);
     lv_obj_set_style_border_width(sleep_chip, 1, 0);
     lv_obj_set_style_translate_y(sleep_chip, 2, LV_STATE_PRESSED);
     lv_obj_clear_flag(sleep_chip, LV_OBJ_FLAG_SCROLLABLE);
@@ -390,7 +390,7 @@ static void nav_room_chip_create(lv_obj_t *header)
     lv_obj_align(room_chip, LV_ALIGN_LEFT_MID, 16, 0);
     lv_obj_set_style_bg_color(room_chip, lv_color_hex(UI_BUTTON), 0);
     lv_obj_set_style_bg_opa(room_chip, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(room_chip, 20, 0);
+    lv_obj_set_style_radius(room_chip, UI_R(20), 0);
     lv_obj_set_style_border_width(room_chip, 1, 0);
     lv_obj_set_style_border_color(room_chip, lv_color_hex(UI_EDGE), 0);
     lv_obj_set_style_bg_color(room_chip, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
@@ -705,7 +705,8 @@ static lv_obj_t *nav_panel_create(lv_obj_t *screen, const char *title_text,
     lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(p, 2, 0);
     lv_obj_set_style_border_color(p, lv_color_hex(UI_AMBER), 0);
-    lv_obj_set_style_radius(p, 16, 0);
+    ui_frame(p, UI_AMBER, 2);
+    lv_obj_set_style_radius(p, UI_R(16), 0);
     lv_obj_clear_flag(p, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(p, LV_OBJ_FLAG_CLICKABLE);
 
@@ -713,6 +714,7 @@ static lv_obj_t *nav_panel_create(lv_obj_t *screen, const char *title_text,
     lv_label_set_text(title, title_text);
     lv_obj_set_style_text_color(title, lv_color_hex(UI_TEXT), 0);
     lv_obj_set_style_text_font(title, &p4_font_28, 0);
+    ui_title(title);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 30, 20);
 
     lv_obj_t *close = create_button(p, "CLOSE", 150, 50);
@@ -796,7 +798,8 @@ static lv_obj_t *modal_create(lv_obj_t *screen, int w, int h, lv_obj_t **panel_o
     lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(p, 2, 0);
     lv_obj_set_style_border_color(p, lv_color_hex(UI_AMBER), 0);
-    lv_obj_set_style_radius(p, 18, 0);
+    ui_frame(p, UI_AMBER, 2);
+    lv_obj_set_style_radius(p, UI_R(18), 0);
     lv_obj_clear_flag(p, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(p, LV_OBJ_FLAG_CLICKABLE);                   /* taps on it stay on it */
     *panel_out = p;
@@ -906,7 +909,7 @@ static void group_dialog_open(void)
 
     /* Short title on one line; the room goes in the line under it (a long
      * "PLAY TOGETHER WITH <room>" wrapped onto that line and covered it). */
-    ui_text(group_panel, "PLAY TOGETHER", &p4_font_28, UI_TEXT, 28, 20, 0);
+    ui_title(ui_text(group_panel, "PLAY TOGETHER", &p4_font_28, UI_TEXT, 28, 20, 0));
     char sub[96];
     snprintf(sub, sizeof(sub), "Rooms switched on play the same music as %s.",
              lyrion_players[sel].short_name);
@@ -924,7 +927,7 @@ static void group_dialog_open(void)
         lv_obj_set_pos(r, 28, 100 + row * 68);
         lv_obj_set_style_bg_color(r, lv_color_hex(UI_BUTTON), 0);
         lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(r, 12, 0);
+        lv_obj_set_style_radius(r, UI_R(12), 0);
         lv_obj_set_style_border_width(r, 1, 0);
         lv_obj_set_style_border_color(r, lv_color_hex(UI_EDGE), 0);
         lv_obj_clear_flag(r, LV_OBJ_FLAG_SCROLLABLE);
@@ -1018,7 +1021,7 @@ static void sleep_picker_create(lv_obj_t *screen)
     lv_obj_remove_style_all(amp);
     lv_obj_set_size(amp, 870, 58);
     lv_obj_set_pos(amp, 30, 344);
-    lv_obj_set_style_radius(amp, 12, 0);
+    lv_obj_set_style_radius(amp, UI_R(12), 0);
     lv_obj_set_style_border_width(amp, 1, 0);
     lv_obj_set_style_border_color(amp, lv_color_hex(UI_EDGE), 0);
     lv_obj_clear_flag(amp, LV_OBJ_FLAG_SCROLLABLE);
@@ -1112,7 +1115,7 @@ static void rooms_create(lv_obj_t *screen)
         lv_obj_set_pos(c->card, x0 + i * (w + gap), y0);
         lv_obj_set_style_bg_color(c->card, lv_color_hex(UI_BUTTON), 0);
         lv_obj_set_style_bg_opa(c->card, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(c->card, 18, 0);
+        lv_obj_set_style_radius(c->card, UI_R(18), 0);
         lv_obj_set_style_border_width(c->card, 1, 0);
         lv_obj_set_style_border_color(c->card, lv_color_hex(UI_EDGE), 0);
         lv_obj_clear_flag(c->card, LV_OBJ_FLAG_SCROLLABLE);
@@ -1126,7 +1129,7 @@ static void rooms_create(lv_obj_t *screen)
         lv_obj_set_pos(ph, 16, 16);
         lv_obj_set_style_bg_color(ph, lv_color_hex(UI_ALBUM_BG), 0);
         lv_obj_set_style_bg_opa(ph, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(ph, 10, 0);
+        lv_obj_set_style_radius(ph, UI_R(10), 0);
         lv_obj_clear_flag(ph, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_t *note = lv_label_create(ph);
         lv_label_set_text(note, LV_SYMBOL_AUDIO);
@@ -1325,7 +1328,7 @@ static void hub_create(lv_obj_t *screen)
         lv_obj_set_pos(tile, 30 + (i % 2) * 444, 90 + (i / 2) * 104);
         lv_obj_set_style_bg_color(tile, lv_color_hex(UI_BUTTON), 0);
         lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(tile, 18, 0);
+        lv_obj_set_style_radius(tile, UI_R(18), 0);
         lv_obj_set_style_border_width(tile, 1, 0);
         lv_obj_set_style_border_color(tile, lv_color_hex(UI_EDGE), 0);
         lv_obj_set_style_bg_color(tile, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
@@ -1339,7 +1342,7 @@ static void hub_create(lv_obj_t *screen)
         lv_obj_align(icon_box, LV_ALIGN_LEFT_MID, 20, 0);
         lv_obj_set_style_bg_color(icon_box, lv_color_hex(UI_ACCENT_DARK), 0);
         lv_obj_set_style_bg_opa(icon_box, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(icon_box, 16, 0);
+        lv_obj_set_style_radius(icon_box, UI_R(16), 0);
         lv_obj_clear_flag(icon_box, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_t *icon = lv_label_create(icon_box);
         lv_label_set_text(icon, icons[i]);
@@ -1610,10 +1613,15 @@ static void nav_create(lv_obj_t *screen)
      * behind the tabs). */
     nav_pill = lv_obj_create(nav_bar);
     lv_obj_remove_style_all(nav_pill);
-    lv_obj_set_size(nav_pill, 176, 52);
-    lv_obj_set_pos(nav_pill, NAV_TAB_X(0), 6);
-    lv_obj_set_style_radius(nav_pill, 14, 0);
-    lv_obj_set_style_bg_color(nav_pill, lv_color_hex(UI_ACCENT_DARK), 0);
+    if (UI_LOOK.tab_underline) {        /* this theme marks the tab with a line under it */
+        lv_obj_set_size(nav_pill, 176, 3);
+        lv_obj_set_pos(nav_pill, NAV_TAB_X(0), 57);
+    } else {
+        lv_obj_set_size(nav_pill, 176, 52);
+        lv_obj_set_pos(nav_pill, NAV_TAB_X(0), 6);
+    }
+    lv_obj_set_style_radius(nav_pill, UI_R(14), 0);
+    lv_obj_set_style_bg_color(nav_pill, lv_color_hex(UI_LOOK.tab_underline ? UI_ACCENT : UI_ACCENT_DARK), 0);
     lv_obj_set_style_bg_opa(nav_pill, LV_OPA_COVER, 0);
     lv_obj_clear_flag(nav_pill, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
 
@@ -1622,7 +1630,7 @@ static void nav_create(lv_obj_t *screen)
         lv_obj_remove_style_all(tab);
         lv_obj_set_size(tab, 176, 52);
         lv_obj_set_pos(tab, NAV_TAB_X(i), 6);
-        lv_obj_set_style_radius(tab, 14, 0);
+        lv_obj_set_style_radius(tab, UI_R(14), 0);
         lv_obj_set_style_bg_color(tab, lv_color_hex(UI_ACCENT_DARK), 0);
         lv_obj_set_style_bg_opa(tab, LV_OPA_TRANSP, 0);
         lv_obj_set_style_bg_color(tab, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);

@@ -88,7 +88,7 @@ static void wifi_rebuild_list_locked(void)
         lv_obj_set_pos(row, 6, 4 + i * 64);
         lv_obj_set_style_bg_color(row, lv_color_hex(current ? UI_ACCENT_DARK : UI_BUTTON), 0);
         lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(row, 10, 0);
+        lv_obj_set_style_radius(row, UI_R(10), 0);
         lv_obj_set_style_border_width(row, current ? 2 : 1, 0);
         lv_obj_set_style_border_color(row, lv_color_hex(current ? UI_ACCENT_GLOW : UI_EDGE), 0);
         lv_obj_set_style_bg_color(row, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
@@ -347,9 +347,10 @@ static void wp_create(void)
     lv_obj_set_pos(panel, 14, 10);
     lv_obj_set_style_bg_color(panel, lv_color_hex(UI_PANEL), 0);
     lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(panel, 14, 0);
+    lv_obj_set_style_radius(panel, UI_R(14), 0);
     lv_obj_set_style_border_width(panel, 2, 0);
     lv_obj_set_style_border_color(panel, lv_color_hex(UI_AMBER), 0);
+    ui_frame(panel, UI_AMBER, 2);
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
 
     wp_title = lv_label_create(panel);
@@ -470,7 +471,8 @@ static void wifi_create(void)
     lv_obj_set_style_bg_opa(wifi_overlay, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(wifi_overlay, 2, LV_PART_MAIN);
     lv_obj_set_style_border_color(wifi_overlay, lv_color_hex(UI_AMBER), LV_PART_MAIN);
-    lv_obj_set_style_radius(wifi_overlay, 16, LV_PART_MAIN);
+    ui_frame(wifi_overlay, UI_AMBER, 2);
+    lv_obj_set_style_radius(wifi_overlay, UI_R(16), LV_PART_MAIN);
     lv_obj_clear_flag(wifi_overlay, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(wifi_overlay, LV_OBJ_FLAG_CLICKABLE);
 
@@ -478,6 +480,7 @@ static void wifi_create(void)
     lv_label_set_text(title, "WI-FI");
     lv_obj_set_style_text_color(title, lv_color_hex(UI_TEXT), 0);
     lv_obj_set_style_text_font(title, &p4_font_28, 0);
+    ui_title(title);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 30, 20);
 
     lv_obj_t *close = create_button(wifi_overlay, "CLOSE", 150, 50);

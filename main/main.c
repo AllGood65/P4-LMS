@@ -59,6 +59,9 @@ LV_FONT_DECLARE(p4_clock_oswald)
 LV_FONT_DECLARE(p4_clock_dseg7)
 LV_FONT_DECLARE(p4_clock_dmserif)
 LV_FONT_DECLARE(p4_clock_orbitron)
+LV_FONT_DECLARE(p4_title_deco)     /* theme title fonts (styled themes) */
+LV_FONT_DECLARE(p4_title_brass)
+LV_FONT_DECLARE(p4_title_neon)
 #define P4_SYMBOL_STAR "\xEF\x80\x85"     /* U+F005, in the p4 fonts */
 
 #include "bsp/esp-bsp.h"
@@ -85,6 +88,7 @@ static void *cjson_psram_malloc(size_t n)
 #include "parts/02_config.c"
 #include "parts/03_shared_state.c"
 #include "parts/03b_ui_jobs.c"
+#include "parts/03c_looks.c"
 #include "parts/04_vu_and_visualizer.c"
 #include "parts/05_screensaver_state.c"
 #include "parts/06_wifi_state_and_locations.c"
@@ -97,7 +101,6 @@ static void *cjson_psram_malloc(size_t n)
 #include "parts/11_transport_controls.c"
 #include "parts/12_source_browser_core.c"
 #include "parts/13_settings_themes.c"
-#include "parts/13b_cover_theme.c"
 #include "parts/14_power_and_browser_rows.c"
 #include "parts/15_queue_save_and_browser_query.c"
 #include "parts/16_wifi_picker.c"
@@ -458,6 +461,7 @@ void app_main(void)
         &p4_font_28,
         0
     );
+    ui_title(header_clock_label);          /* the theme's title lettering */
     lv_obj_align(
         header_clock_label,
         LV_ALIGN_CENTER,
@@ -521,9 +525,10 @@ void app_main(void)
         lv_color_hex(UI_AMBER),
         LV_PART_MAIN
     );
+    ui_frame(album, UI_AMBER, 1);          /* this theme's trim style */
     lv_obj_set_style_radius(
         album,
-        4,
+        UI_R(4),
         LV_PART_MAIN
     );
 
@@ -583,7 +588,8 @@ void app_main(void)
     lv_obj_set_style_bg_opa(now_playing_panel, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(now_playing_panel, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(now_playing_panel, lv_color_hex(UI_EDGE), LV_PART_MAIN);
-    lv_obj_set_style_radius(now_playing_panel, 12, LV_PART_MAIN);
+    ui_frame(now_playing_panel, UI_EDGE, 1);
+    lv_obj_set_style_radius(now_playing_panel, UI_R(12), LV_PART_MAIN);
     lv_obj_clear_flag(now_playing_panel, LV_OBJ_FLAG_SCROLLABLE);
 
     /* ========================================================
@@ -644,7 +650,7 @@ void app_main(void)
     );
     lv_obj_set_style_bg_color(play_state_label, lv_color_hex(UI_ACCENT_DARK), 0);
     lv_obj_set_style_bg_opa(play_state_label, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(play_state_label, 12, 0);
+    lv_obj_set_style_radius(play_state_label, UI_R(12), 0);
     lv_obj_set_style_pad_hor(play_state_label, 12, 0);
     lv_obj_set_style_pad_ver(play_state_label, 4, 0);
 
@@ -789,7 +795,7 @@ void app_main(void)
     lv_obj_align(format_label, LV_ALIGN_TOP_LEFT, 435, 222);
     lv_obj_set_style_border_width(format_label, 1, 0);
     lv_obj_set_style_border_color(format_label, lv_color_hex(UI_EDGE), 0);
-    lv_obj_set_style_radius(format_label, 12, 0);
+    lv_obj_set_style_radius(format_label, UI_R(12), 0);
     lv_obj_set_style_pad_hor(format_label, 12, 0);
     lv_obj_set_style_pad_ver(format_label, 3, 0);
 
@@ -870,8 +876,8 @@ void app_main(void)
         LV_OPA_COVER,
         LV_PART_INDICATOR
     );
-    lv_obj_set_style_radius(progress_bar, 7, LV_PART_MAIN);
-    lv_obj_set_style_radius(progress_bar, 7, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(progress_bar, UI_R(7), LV_PART_MAIN);
+    lv_obj_set_style_radius(progress_bar, UI_R(7), LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(progress_bar, lv_color_hex(UI_ACCENT), LV_PART_INDICATOR);
 
     /* Tap or drag on the bar to seek.  The bar is thin, so make the touch
@@ -1278,7 +1284,8 @@ void app_main(void)
     );
     lv_obj_set_style_border_width(spectrum, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(spectrum, lv_color_hex(UI_EDGE), LV_PART_MAIN);
-    lv_obj_set_style_radius(spectrum, 4, LV_PART_MAIN);
+    ui_frame(spectrum, UI_EDGE, 1);
+    lv_obj_set_style_radius(spectrum, UI_R(4), LV_PART_MAIN);
 
     lv_obj_t *vu_title = lv_label_create(spectrum);
     lv_label_set_text(
@@ -1361,7 +1368,7 @@ void app_main(void)
         );
         lv_obj_set_style_radius(
             vu_left_segments[i],
-            2,
+            UI_R(2),
             LV_PART_MAIN
         );
         lv_obj_align(
@@ -1394,7 +1401,7 @@ void app_main(void)
         );
         lv_obj_set_style_radius(
             vu_right_segments[i],
-            2,
+            UI_R(2),
             LV_PART_MAIN
         );
         lv_obj_align(

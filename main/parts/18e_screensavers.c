@@ -218,7 +218,7 @@ static void ss_wall_create(lv_obj_t *overlay)
     lv_obj_set_style_text_color(ss_wall_caption, lv_color_hex(UI_TEXT_SOFT), 0);
     lv_obj_set_style_bg_color(ss_wall_caption, lv_color_hex(0x140C14), 0);
     lv_obj_set_style_bg_opa(ss_wall_caption, LV_OPA_80, 0);
-    lv_obj_set_style_radius(ss_wall_caption, 12, 0);
+    lv_obj_set_style_radius(ss_wall_caption, UI_R(12), 0);
     lv_obj_set_style_pad_ver(ss_wall_caption, 10, 0);
     lv_obj_set_style_pad_hor(ss_wall_caption, 16, 0);
     lv_obj_set_height(ss_wall_caption, lv_font_get_line_height(&p4_font_18) + 20);   /* one line + padding */
@@ -232,7 +232,7 @@ static void ss_wall_create(lv_obj_t *overlay)
     lv_obj_set_style_bg_color(ss_wall_clock, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(ss_wall_clock, LV_OPA_60, 0);
     lv_obj_set_style_pad_all(ss_wall_clock, 6, 0);
-    lv_obj_set_style_radius(ss_wall_clock, 8, 0);
+    lv_obj_set_style_radius(ss_wall_clock, UI_R(8), 0);
     lv_obj_align(ss_wall_clock, LV_ALIGN_TOP_RIGHT, -16, 12);
 
     lv_obj_add_flag(ss_wall_box, LV_OBJ_FLAG_HIDDEN);
@@ -397,10 +397,10 @@ static void ss_big_create(lv_obj_t *overlay)
     lv_bar_set_range(ss_big_bar, 0, 1000);
     lv_obj_set_style_bg_opa(ss_big_bar, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(ss_big_bar, lv_color_hex(0x2A1E2A), LV_PART_MAIN);
-    lv_obj_set_style_radius(ss_big_bar, 3, LV_PART_MAIN);
+    lv_obj_set_style_radius(ss_big_bar, UI_R(3), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(ss_big_bar, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(ss_big_bar, lv_color_hex(UI_ACCENT), LV_PART_INDICATOR);
-    lv_obj_set_style_radius(ss_big_bar, 3, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(ss_big_bar, UI_R(3), LV_PART_INDICATOR);
     lv_obj_clear_flag(ss_big_bar, LV_OBJ_FLAG_CLICKABLE);
     ss_big_el = ui_text(ss_big_box, "", &p4_font_16, UI_TEXT_DIM, 70, 466, 120);
     ss_big_total = ui_text(ss_big_box, "", &p4_font_16, UI_TEXT_DIM, 954 - 120, 466, 120);
@@ -570,7 +570,7 @@ static void ss_vu_create(lv_obj_t *overlay)
         lv_obj_set_pos(f, ch ? 532 : 60, 110);
         lv_obj_set_style_bg_color(f, lv_color_hex(0x16100A), 0);
         lv_obj_set_style_bg_opa(f, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(f, 18, 0);
+        lv_obj_set_style_radius(f, UI_R(18), 0);
         lv_obj_set_style_border_width(f, 2, 0);
         lv_obj_set_style_border_color(f, ss_dim(UI_ACCENT_GLOW, 40), 0);
         lv_obj_clear_flag(f, LV_OBJ_FLAG_CLICKABLE);

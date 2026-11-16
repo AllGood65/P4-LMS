@@ -12,6 +12,7 @@ P4-LMS is built with, and its firmware includes, the following components. Each 
 | [libpng](http://www.libpng.org/pub/png/libpng.html) / zlib | PNG cover art decoding | libpng License / zlib License |
 | Espressif component registry packages (board support package, codec driver, esp_lcd drivers) | Display, touch and microphone | Apache License 2.0 (see each package) |
 | [Montserrat](https://github.com/JulietaUla/Montserrat) typeface | Display fonts (converted to LVGL fonts) | SIL Open Font License 1.1 |
+| [Poiret One](https://github.com/google/fonts/tree/main/ofl/poiretone), [Cinzel](https://github.com/google/fonts/tree/main/ofl/cinzel), [Josefin Sans](https://github.com/google/fonts/tree/main/ofl/josefinsans) typefaces | Titles in the styled themes (converted to LVGL fonts) | SIL Open Font License 1.1 |
 | [Font Awesome Free](https://fontawesome.com/) icons | Symbols in the display fonts | Icons: CC BY 4.0; fonts: SIL Open Font License 1.1 |
 
 Services used at run time (not included in the firmware):

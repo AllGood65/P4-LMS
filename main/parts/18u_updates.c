@@ -275,12 +275,14 @@ static void upd_card_show_locked(const char *text, int percent)
         lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(box, 2, 0);
         lv_obj_set_style_border_color(box, lv_color_hex(UI_AMBER), 0);
-        lv_obj_set_style_radius(box, 16, 0);
+        ui_frame(box, UI_AMBER, 2);
+        lv_obj_set_style_radius(box, UI_R(16), 0);
         lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
 
         lv_obj_t *title = lv_label_create(box);
         lv_label_set_text(title, "UPDATING P4-LMS");
         lv_obj_set_style_text_font(title, &p4_font_28, 0);
+        ui_title(title);
         lv_obj_set_style_text_color(title, lv_color_hex(UI_TEXT), 0);
         lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 22);
 

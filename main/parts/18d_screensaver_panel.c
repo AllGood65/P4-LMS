@@ -473,7 +473,7 @@ static void vsp_create(lv_obj_t *screen)
         lv_obj_align(strip, LV_ALIGN_BOTTOM_MID, 0, 4);
         lv_obj_set_style_bg_color(strip, lv_color_hex(vis_palette_colors[i][4]), 0);
         lv_obj_set_style_bg_opa(strip, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(strip, 2, 0);
+        lv_obj_set_style_radius(strip, UI_R(2), 0);
         lv_obj_clear_flag(strip, LV_OBJ_FLAG_CLICKABLE);
         vsp_pal_btn[i] = b;
     }

@@ -12,6 +12,17 @@
  * at start-up, so choosing one restarts the display.  Add a theme by adding
  * an entry to the table below.
  * ============================================================ */
+/* A theme's STYLE: its shapes and title lettering, on top of its colours.
+ *   CLASSIC  rounded corners, 2 px trim, filled buttons (the original look)
+ *   SOFT     rounded, hairline 1 px trim, buttons without outlines
+ *   DECO     square corners, double-line trim, outlined buttons, an underline
+ *            for the chosen tab, Poiret One titles
+ *   BRASS    slightly rounded, heavy double-line trim, Cinzel titles
+ *   NEON     square corners, thin single trim, outlined buttons, underline
+ *            tab, Josefin Sans titles
+ * (13c_looks.c turns these into widget settings.) */
+enum { UI_LOOK_CLASSIC = 0, UI_LOOK_SOFT, UI_LOOK_DECO, UI_LOOK_BRASS, UI_LOOK_NEON };
+
 typedef struct {
     const char *name;
     uint32_t bg, panel, panel_alt, button;
@@ -24,6 +35,7 @@ typedef struct {
     uint32_t slider_bg, value_text, divider, tick, scale_text;
     uint32_t date, conn_amber;
     uint32_t vis[6];             /* visualizer "THEME" palette, quiet to loud */
+    uint8_t  look;               /* UI_LOOK_*: shapes and title lettering      */
 } ui_theme_t;
 
 static const ui_theme_t ui_themes[] = {
@@ -37,6 +49,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x0A0B0D, .album_bg = 0x252A2E, .placeholder = 0x6E777D, .label_soft = 0xA69B8A, .label_dim = 0x8F887D,
         .slider_bg = 0x38332C, .value_text = 0xC7B486, .divider = 0x4A443A, .tick = 0xC7AA70, .scale_text = 0xB69A62,
         .date = 0xA88A55, .conn_amber = 0xC7A84B,
+        .look = UI_LOOK_CLASSIC,
         .vis = { 0x8A5A22, 0xB97A2C, 0xD89B3D, 0xFFC55A, 0xF08A30, 0xE2513C },
     },
     {
@@ -49,6 +62,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x080B10, .album_bg = 0x202A38, .placeholder = 0x6F7D8C, .label_soft = 0x95A2B1, .label_dim = 0x82909E,
         .slider_bg = 0x223245, .value_text = 0x7EAFD8, .divider = 0x28405A, .tick = 0x7EAFD8, .scale_text = 0x5E90BA,
         .date = 0x608EB5, .conn_amber = 0x6FABDD,
+        .look = UI_LOOK_SOFT,
         .vis = { 0x1F4E7A, 0x2E78B8, 0x4DA3E8, 0x8FD0FF, 0x5FD4E8, 0xE05A5A },
     },
     {
@@ -61,11 +75,12 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x060C0D, .album_bg = 0x1A2A2E, .placeholder = 0x64807C, .label_soft = 0x88A4A0, .label_dim = 0x76928E,
         .slider_bg = 0x1B3233, .value_text = 0x66C0B6, .divider = 0x234A46, .tick = 0x66C0B6, .scale_text = 0x48A298,
         .date = 0x4A9F95, .conn_amber = 0x54C1B5,
+        .look = UI_LOOK_CLASSIC,
         .vis = { 0x146058, 0x1F9A8C, 0x2BC4B4, 0x7DF0E2, 0xE8C34A, 0xE0604A },
     },
     {
         .name = "PHOSPHOR",
-        .bg = 0x090E0B, .panel = 0x111A14, .panel_alt = 0x0F1712, .button = 0x1F2D24,
+        .bg = 0x090E0B, .panel = 0x111A14, .panel_alt = 0x0F1712, .button = 0x16211A,
         .accent = 0x3FD16A, .accent_glow = 0x8CFFAB, .accent_bright = 0xC9FFD8, .accent_dark = 0x1B5E32,
         .text = 0xDDF5E3, .text_soft = 0x9DBBA6, .text_dim = 0x6A8974,
         .amber = 0x55E07E, .orange = 0xC8E04A, .red = 0xE0503C, .tertiary = 0x8CFFAB,
@@ -73,11 +88,12 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x050806, .album_bg = 0x1A261E, .placeholder = 0x5F7A68, .label_soft = 0x84A18D, .label_dim = 0x728E7B,
         .slider_bg = 0x1C3224, .value_text = 0x6EC688, .divider = 0x254A30, .tick = 0x6EC688, .scale_text = 0x4FA669,
         .date = 0x51A169, .conn_amber = 0x60C97F,
+        .look = UI_LOOK_NEON,
         .vis = { 0x1B5E32, 0x2A9B4E, 0x3FD16A, 0x8CFFAB, 0xC8E04A, 0xE0503C },
     },
     {
         .name = "SYNTH",
-        .bg = 0x100A1A, .panel = 0x1A1228, .panel_alt = 0x160F22, .button = 0x2B2040,
+        .bg = 0x100A1A, .panel = 0x1A1228, .panel_alt = 0x160F22, .button = 0x20172F,
         .accent = 0xE040C0, .accent_glow = 0xFF80E6, .accent_bright = 0xFFC2F5, .accent_dark = 0x6A1F66,
         .text = 0xF3E8FA, .text_soft = 0xBBA8CC, .text_dim = 0x8B7A9B,
         .amber = 0xFF5FD0, .orange = 0x4FD8FF, .red = 0xFF5A6E, .tertiary = 0xFF80E6,
@@ -85,6 +101,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x08050D, .album_bg = 0x251B38, .placeholder = 0x7B6A8C, .label_soft = 0xA18FB2, .label_dim = 0x8E7D9F,
         .slider_bg = 0x331F44, .value_text = 0xCE74C6, .divider = 0x4A285B, .tick = 0xCE74C6, .scale_text = 0xB563AD,
         .date = 0xAC5FA8, .conn_amber = 0xD364C4,
+        .look = UI_LOOK_NEON,
         .vis = { 0x6A1F66, 0xA02E98, 0xE040C0, 0xFF80E6, 0x4FD8FF, 0xFF5A6E },
     },
     {
@@ -97,6 +114,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x050505, .album_bg = 0x232323, .placeholder = 0x7A7A7A, .label_soft = 0x9F9F9F, .label_dim = 0x8D8D8D,
         .slider_bg = 0x2F2F2F, .value_text = 0xCFCFCF, .divider = 0x3C3C3C, .tick = 0xCFCFCF, .scale_text = 0xB0B0B0,
         .date = 0xABABAB, .conn_amber = 0xD6D6D6,
+        .look = UI_LOOK_SOFT,
         .vis = { 0x555555, 0x888888, 0xE6E6E6, 0xFFFFFF, 0xBFBFBF, 0xD46A6A },
     },
     {
@@ -109,6 +127,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x050202, .album_bg = 0x1E0F0F, .placeholder = 0x683434, .label_soft = 0x864141, .label_dim = 0x773B3B,
         .slider_bg = 0x291212, .value_text = 0xA53D3D, .divider = 0x3C1919, .tick = 0xA53D3D, .scale_text = 0x8C3232,
         .date = 0x883232, .conn_amber = 0xA83939,
+        .look = UI_LOOK_CLASSIC,
         .vis = { 0x501818, 0x7A2424, 0xB03030, 0xD04848, 0xD05030, 0xE04040 },
     },
     {
@@ -121,6 +140,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x0E0906, .album_bg = 0x312317, .placeholder = 0x8F7C5C, .label_soft = 0xAE9975, .label_dim = 0x9E8B69,
         .slider_bg = 0x3D2A1A, .value_text = 0xCBA660, .divider = 0x543A21, .tick = 0xCBA660, .scale_text = 0xB28E4B,
         .date = 0xAE8C4D, .conn_amber = 0xCEA555,
+        .look = UI_LOOK_CLASSIC,
         .vis = { 0x5B3A1B, 0x8C5A22, 0xD4A03A, 0xF0C664, 0xC9622D, 0xB23A2E },
     },
     {
@@ -133,11 +153,13 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x0B0907, .album_bg = 0x28211C, .placeholder = 0x827759, .label_soft = 0x9E9275, .label_dim = 0x908467,
         .slider_bg = 0x362D20, .value_text = 0xB8A369, .divider = 0x483D28, .tick = 0xB8A369, .scale_text = 0xA08C52,
         .date = 0x9D8A53, .conn_amber = 0xBAA360,
+        .look = UI_LOOK_BRASS,
         .vis = { 0x3E5E57, 0x52A798, 0xBFA24B, 0xE6CB7A, 0xB86A3E, 0xA8402F },
     },
     {
+        /* (outlined-button styles: the button fill sits just above the panel) */
         .name = "ART DECO",
-        .bg = 0x0B0D0F, .panel = 0x13171A, .panel_alt = 0x101417, .button = 0x1F2A2A,
+        .bg = 0x0B0D0F, .panel = 0x13171A, .panel_alt = 0x101417, .button = 0x181D20,
         .accent = 0xD6B35A, .accent_glow = 0xF0D58C, .accent_bright = 0xFFF0C4, .accent_dark = 0x6F5B27,
         .text = 0xF5EFE0, .text_soft = 0xB9B3A2, .text_dim = 0x848170,
         .amber = 0x2FA87E, .orange = 0x2FA87E, .red = 0xC8503C, .tertiary = 0x5CD6A6,
@@ -145,11 +167,12 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x060809, .album_bg = 0x1B2324, .placeholder = 0x817E6E, .label_soft = 0xA39E8D, .label_dim = 0x928E7E,
         .slider_bg = 0x1B342E, .value_text = 0xC8B37E, .divider = 0x1A5243, .tick = 0xC8B37E, .scale_text = 0xAC9864,
         .date = 0xA79665, .conn_amber = 0xCCB373,
+        .look = UI_LOOK_DECO,
         .vis = { 0x14503F, 0x1F8C68, 0x2FA87E, 0xD6B35A, 0xF0D58C, 0xC8503C },
     },
     {
         .name = "ROYAL",
-        .bg = 0x0A0F1E, .panel = 0x121A30, .panel_alt = 0x0F1629, .button = 0x1E2A4A,
+        .bg = 0x0A0F1E, .panel = 0x121A30, .panel_alt = 0x0F1629, .button = 0x172038,
         .accent = 0xE0B24E, .accent_glow = 0xFFD983, .accent_bright = 0xFFEDB8, .accent_dark = 0x6C5420,
         .text = 0xEEF1F8, .text_soft = 0xA9B3CB, .text_dim = 0x7685A4,
         .amber = 0x5C8DE0, .orange = 0x5C8DE0, .red = 0xD05252, .tertiary = 0x9DB8F0,
@@ -157,6 +180,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x060914, .album_bg = 0x1A2441, .placeholder = 0x7080A0, .label_soft = 0x929FBA, .label_dim = 0x818FAD,
         .slider_bg = 0x1E2B4C, .value_text = 0xC4B28C, .divider = 0x24365E, .tick = 0xC4B28C, .scale_text = 0xA89977,
         .date = 0xA2967B, .conn_amber = 0xCDB27A,
+        .look = UI_LOOK_DECO,
         .vis = { 0x1E3A78, 0x3B66C4, 0x5C8DE0, 0xE0B24E, 0xFFD983, 0xD05252 },
     },
     {
@@ -169,6 +193,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x060708, .album_bg = 0x202328, .placeholder = 0x717A87, .label_soft = 0x919AA7, .label_dim = 0x818A97,
         .slider_bg = 0x252A31, .value_text = 0x729EDE, .divider = 0x2A303A, .tick = 0x729EDE, .scale_text = 0x5782C3,
         .date = 0x5A82BD, .conn_amber = 0x6298E8,
+        .look = UI_LOOK_SOFT,
         .vis = { 0x1E4A99, 0x3D8BFF, 0x35D0BA, 0xFFD166, 0xFF6F61, 0xE5384F },
     },
     {
@@ -181,6 +206,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x080B0E, .album_bg = 0x212A32, .placeholder = 0x74818B, .label_soft = 0x94A1AA, .label_dim = 0x84919B,
         .slider_bg = 0x28323C, .value_text = 0x94B0C4, .divider = 0x323F4A, .tick = 0x94B0C4, .scale_text = 0x7A95AA,
         .date = 0x7993A7, .conn_amber = 0x8EAEC6,
+        .look = UI_LOOK_SOFT,
         .vis = { 0x36566E, 0x5E8CAE, 0x7FA9C9, 0x8FB39A, 0xD8B98E, 0xD0685A },
     },
     {
@@ -193,6 +219,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x0B050B, .album_bg = 0x311A32, .placeholder = 0x9A7688, .label_soft = 0xBA99A5, .label_dim = 0xAA8796,
         .slider_bg = 0x3B1C32, .value_text = 0xE8957E, .divider = 0x562644, .tick = 0xE8957E, .scale_text = 0xCC7866,
         .date = 0xC7786A, .conn_amber = 0xEF8D6D,
+        .look = UI_LOOK_CLASSIC,
         .vis = { 0x5A1F5E, 0xB0306F, 0xE8467C, 0xFF7A45, 0xFFC857, 0xFFF0B0 },
     },
     {
@@ -205,6 +232,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x060906, .album_bg = 0x1E2920, .placeholder = 0x788669, .label_soft = 0x9AA286, .label_dim = 0x899478,
         .slider_bg = 0x233021, .value_text = 0xA6BB7A, .divider = 0x304528, .tick = 0xA6BB7A, .scale_text = 0x8AA462,
         .date = 0x88A162, .conn_amber = 0xA3BD70,
+        .look = UI_LOOK_CLASSIC,
         .vis = { 0x2F4A1F, 0x5E8A2E, 0x9CC25A, 0xE6C86E, 0xC9834A, 0xC5533C },
     },
     {
@@ -217,6 +245,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x090707, .album_bg = 0x272123, .placeholder = 0x917A76, .label_soft = 0xB19A96, .label_dim = 0xA18A86,
         .slider_bg = 0x33282B, .value_text = 0xD0A89C, .divider = 0x48363A, .tick = 0xD0A89C, .scale_text = 0xB58D81,
         .date = 0xB18B80, .conn_amber = 0xD3A697,
+        .look = UI_LOOK_SOFT,
         .vis = { 0x6A4A55, 0xB47C96, 0xD9A08C, 0xF0C0B0, 0xE8D0A0, 0xD6566A },
     },
     {
@@ -229,6 +258,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x04080E, .album_bg = 0x162437, .placeholder = 0x6C8199, .label_soft = 0x90A5BC, .label_dim = 0x7E93AB,
         .slider_bg = 0x1A2F47, .value_text = 0x74B3E4, .divider = 0x213D5C, .tick = 0x74B3E4, .scale_text = 0x5695C7,
         .date = 0x5893C2, .conn_amber = 0x64B0E9,
+        .look = UI_LOOK_CLASSIC,
         .vis = { 0x17507E, 0x2A7CC0, 0x3FA9F5, 0x8FD3FF, 0xF2C46B, 0xF2A93B },
     },
     {
@@ -241,6 +271,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x030405, .album_bg = 0x15181F, .placeholder = 0x6B7480, .label_soft = 0x8D96A3, .label_dim = 0x7C8591,
         .slider_bg = 0x19212E, .value_text = 0x699CDC, .divider = 0x1D2A3E, .tick = 0x699CDC, .scale_text = 0x4D80C0,
         .date = 0x507FB9, .conn_amber = 0x5898E7,
+        .look = UI_LOOK_CLASSIC,
         .vis = { 0x163F80, 0x2462C8, 0x2F8CFF, 0x7DBBFF, 0x3BD16F, 0xE04848 },
     },
     {
@@ -253,6 +284,7 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x080C0B, .album_bg = 0x1F2B29, .placeholder = 0x7C7A6E, .label_soft = 0x9D998B, .label_dim = 0x8C8A7D,
         .slider_bg = 0x203330, .value_text = 0xBC9472, .divider = 0x264A44, .tick = 0xBC9472, .scale_text = 0xA37C5C,
         .date = 0x9C7A5C, .conn_amber = 0xBE8C64,
+        .look = UI_LOOK_BRASS,
         .vis = { 0x1F5E55, 0x3FA595, 0x7FD1C0, 0xC47A45, 0xE6A571, 0xC8503C },
     },
     {
@@ -265,11 +297,12 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x0B0806, .album_bg = 0x2D211A, .placeholder = 0x8C7B69, .label_soft = 0xAE9D89, .label_dim = 0x9D8C79,
         .slider_bg = 0x382A20, .value_text = 0xD6C6AD, .divider = 0x4A3729, .tick = 0xD6C6AD, .scale_text = 0xBAAA92,
         .date = 0xB5A58E, .conn_amber = 0xDBCBB2,
+        .look = UI_LOOK_BRASS,
         .vis = { 0x5A3A24, 0x8C5A34, 0xC98A4B, 0xD9A066, 0xE8D8BC, 0xFFF1D8 },
     },
     {
         .name = "CYBER",
-        .bg = 0x0A0A0D, .panel = 0x131318, .panel_alt = 0x101015, .button = 0x22222C,
+        .bg = 0x0A0A0D, .panel = 0x131318, .panel_alt = 0x101015, .button = 0x18181F,
         .accent = 0xFFE600, .accent_glow = 0xFFF27A, .accent_bright = 0xFFFBC8, .accent_dark = 0x7A6E00,
         .text = 0xF4F4F8, .text_soft = 0xB0B0BE, .text_dim = 0x7D7D92,
         .amber = 0x00E5FF, .orange = 0x00E5FF, .red = 0xFF3355, .tertiary = 0xFF2BD6,
@@ -277,31 +310,11 @@ static const ui_theme_t ui_themes[] = {
         .deep = 0x050507, .album_bg = 0x1D1D25, .placeholder = 0x74748A, .label_soft = 0x9898A9, .label_dim = 0x86869A,
         .slider_bg = 0x252533, .value_text = 0xD8CB5F, .divider = 0x2F2F48, .tick = 0xD8CB5F, .scale_text = 0xBAAD45,
         .date = 0xB3A74C, .conn_amber = 0xE3D342,
+        .look = UI_LOOK_NEON,
         .vis = { 0x6A00B0, 0xFF2BD6, 0x00E5FF, 0xFFE600, 0xFFF27A, 0xFF3355 },
-    },
-    {
-        /* COVER COLOURS: these values only paint its card in SETTINGS.  When it
-         * is the active theme every colour is worked out from the album art
-         * (13b_cover_theme.c) and follows each new cover. */
-        .name = "COVER COLOURS",
-        .bg = 0x0A0E12, .panel = 0x141B22, .panel_alt = 0x11171D, .button = 0x1F2A36,
-        .accent = 0x2EC4B6, .accent_glow = 0x6FD9CF, .accent_bright = 0xB8F1EA, .accent_dark = 0x15605A,
-        .text = 0xEDF2F6, .text_soft = 0xB4C1CC, .text_dim = 0x8A99A6,
-        .amber = 0xF2C14E, .orange = 0xF2C14E, .red = 0xE0484F, .tertiary = 0xE8467C,
-        .edge = 0x31475A, .edge_soft = 0x22303D, .on_accent = 0x061E1C, .track = 0x1C252E,
-        .deep = 0x06090C, .album_bg = 0x1A232C, .placeholder = 0x7E8C98, .label_soft = 0xA2AFBA, .label_dim = 0x95A2AD,
-        .slider_bg = 0x1E2A35, .value_text = 0x8FC6D8, .divider = 0x2A3A49, .tick = 0x8FC6D8, .scale_text = 0x74AFC2,
-        .date = 0x7FAABB, .conn_amber = 0x7FD0E0,
-        .vis = { 0x0F4A45, 0x1F8C82, 0x2EC4B6, 0xF2C14E, 0xE8467C, 0xF6C2D2 },
     },
 };
 #define UI_THEME_COUNT ((int)(sizeof(ui_themes) / sizeof(ui_themes[0])))
-#define UI_THEME_COVER (UI_THEME_COUNT - 1)     /* the theme that follows the album art */
-
-/* The active theme: a copy of its table entry, so the cover-colours theme can
- * change it while running.  ui_theme always points at this copy. */
-static ui_theme_t ui_theme_live;
-static int ui_theme_index = 0;
 static const ui_theme_t *ui_theme = &ui_themes[0];
 
 #define UI_BG            (ui_theme->bg)

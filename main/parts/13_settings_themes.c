@@ -259,6 +259,7 @@ static void settings_close_event_cb(lv_event_t *e)
 static void theme_restart_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
+    ota_keep_running_version();
     esp_restart();
 }
 

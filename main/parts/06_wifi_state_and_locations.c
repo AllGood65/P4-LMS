@@ -173,9 +173,28 @@ static int lms_save_profile(const char *ssid, const char *pass, const char *serv
 static void wifi_save_creds(const char *ssid, const char *pass);
 static esp_err_t wifi_apply_config(const char *ssid, const char *pass);
 
+/* A freshly installed version confirms itself after 30 s with Wi-Fi up
+ * (19_web_settings.c).  A restart the user asked for (a new theme, a setting)
+ * before then would otherwise look like a failed start, and the bootloader
+ * would go back to the previous version.  Having got far enough to be used,
+ * this version clearly runs, so keep it. */
+#include "esp_ota_ops.h"
+
+static void ota_keep_running_version(void)
+{
+    const esp_partition_t *run = esp_ota_get_running_partition();
+    esp_ota_img_states_t st = ESP_OTA_IMG_UNDEFINED;
+    if (run != NULL && esp_ota_get_state_partition(run, &st) == ESP_OK &&
+        st == ESP_OTA_IMG_PENDING_VERIFY) {
+        esp_ota_mark_app_valid_cancel_rollback();
+        ESP_LOGI(TAG, "Firmware update: restarting on purpose - keeping this version");
+    }
+}
+
 static void lms_request_restart(const char *why)
 {
     ESP_LOGW(TAG, "Restarting: %s", why);
+    ota_keep_running_version();
     lms_restart_pending = true;          /* wifi_status_task restarts shortly */
 }
 

@@ -391,7 +391,7 @@ static lv_obj_t *queue_ctrl_button(lv_obj_t *parent, const char *text, int x, in
     lv_obj_set_style_bg_color(b, lv_color_hex(color), 0);
     lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_opa(b, LV_OPA_30, LV_STATE_DISABLED);
-    lv_obj_set_style_radius(b, 8, 0);
+    lv_obj_set_style_radius(b, UI_R(8), 0);
     lv_obj_set_style_bg_color(b, lv_color_hex(UI_ACCENT_GLOW), LV_STATE_PRESSED);
     lv_obj_clear_flag(b, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
@@ -622,7 +622,7 @@ static lv_obj_t *source_add_row_button(lv_obj_t *row, const char *text, lv_event
     lv_obj_align(b, LV_ALIGN_RIGHT_MID, -5 - slot * (size + 12), 0);
     lv_obj_set_style_bg_color(b, lv_color_hex(UI_ACCENT), 0);
     lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(b, 8, 0);
+    lv_obj_set_style_radius(b, UI_R(8), 0);
     lv_obj_set_style_bg_color(b, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
     lv_obj_clear_flag(b, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
@@ -856,7 +856,8 @@ static void source_select_create(lv_obj_t *nav_bar)
 
     source_select_bar = lv_obj_create(nav_bar);
     lv_obj_remove_style_all(source_select_bar);
-    lv_obj_set_size(source_select_bar, 930, 76);
+    lv_obj_set_size(source_select_bar, PANEL_W - 4, 76);
+    lv_obj_set_style_radius(source_select_bar, UI_R(14), 0);
     lv_obj_set_pos(source_select_bar, 0, 1);
     lv_obj_set_style_bg_color(source_select_bar, lv_color_hex(UI_PANEL), 0);
     lv_obj_set_style_bg_opa(source_select_bar, LV_OPA_COVER, 0);

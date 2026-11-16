@@ -18,6 +18,10 @@ enum { TAB_NOW = 0, TAB_LIBRARY, TAB_QUEUE, TAB_ROOMS, TAB_SETTINGS, TAB_COUNT }
 static lv_obj_t *nav_bar = NULL;
 static lv_obj_t *nav_tabs[TAB_COUNT];
 static int       nav_tab_shown = -1;
+static lv_obj_t *nav_pill = NULL;             /* the highlight behind the current tab */
+static int       nav_tab_pending = -1;        /* tab just tapped, shown before its panel is up */
+static uint32_t  nav_tab_pending_tick = 0;
+static void nav_show_tab(int now);
 
 static lv_obj_t *room_chip = NULL;
 static lv_obj_t *room_chip_label = NULL;
@@ -62,8 +66,10 @@ static void ui_toast(const char *text)
 {
     if (toast == NULL || text == NULL) return;
     lv_label_set_text(toast_label, text);
+    const bool was_hidden = lv_obj_has_flag(toast, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(toast, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(toast);
+    if (was_hidden) ui_anim_run(toast, ui_anim_translate_y_cb, 18, 0, 200);   /* slides up into place */
     if (toast_timer == NULL) {
         toast_timer = lv_timer_create(toast_hide_cb, 2800, NULL);
         lv_timer_set_repeat_count(toast_timer, -1);
@@ -102,7 +108,7 @@ static void toast_create(lv_obj_t *screen)
     lv_obj_set_style_pad_hor(toast, 22, 0);
     lv_obj_set_style_bg_color(toast, lv_color_hex(UI_TEXT), 0);
     lv_obj_set_style_bg_opa(toast, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(toast, 21, 0);
+    lv_obj_set_style_radius(toast, UI_R(21), 0);
     lv_obj_clear_flag(toast, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_align(toast, LV_ALIGN_BOTTOM_MID, 0, -(NAV_BAR_H + 14));
     toast_label = lv_label_create(toast);
@@ -361,7 +367,7 @@ static void sleep_chip_create(lv_obj_t *header)
     lv_obj_set_size(sleep_chip, 170, 40);
     lv_obj_align(sleep_chip, LV_ALIGN_LEFT_MID, 616, 0);        /* between the clock and Wi-Fi */
     lv_obj_set_style_bg_opa(sleep_chip, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(sleep_chip, 20, 0);
+    lv_obj_set_style_radius(sleep_chip, UI_R(20), 0);
     lv_obj_set_style_border_width(sleep_chip, 1, 0);
     lv_obj_set_style_translate_y(sleep_chip, 2, LV_STATE_PRESSED);
     lv_obj_clear_flag(sleep_chip, LV_OBJ_FLAG_SCROLLABLE);
@@ -384,7 +390,7 @@ static void nav_room_chip_create(lv_obj_t *header)
     lv_obj_align(room_chip, LV_ALIGN_LEFT_MID, 16, 0);
     lv_obj_set_style_bg_color(room_chip, lv_color_hex(UI_BUTTON), 0);
     lv_obj_set_style_bg_opa(room_chip, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(room_chip, 20, 0);
+    lv_obj_set_style_radius(room_chip, UI_R(20), 0);
     lv_obj_set_style_border_width(room_chip, 1, 0);
     lv_obj_set_style_border_color(room_chip, lv_color_hex(UI_EDGE), 0);
     lv_obj_set_style_bg_color(room_chip, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
@@ -691,12 +697,16 @@ static lv_obj_t *nav_panel_create(lv_obj_t *screen, const char *title_text,
     lv_obj_t *p = lv_obj_create(screen);
     lv_obj_remove_style_all(p);
     lv_obj_set_size(p, PANEL_W, PANEL_H);
+    /* the coloured trim is drawn after (on top of) the panel's contents,
+     * so a list or bar reaching the edge never hides it */
+    lv_obj_set_style_border_post(p, true, 0);
     lv_obj_set_pos(p, PANEL_X, PANEL_Y);
     lv_obj_set_style_bg_color(p, lv_color_hex(UI_PANEL), 0);
     lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(p, 2, 0);
     lv_obj_set_style_border_color(p, lv_color_hex(UI_AMBER), 0);
-    lv_obj_set_style_radius(p, 16, 0);
+    ui_frame(p, UI_AMBER, 2);
+    lv_obj_set_style_radius(p, UI_R(16), 0);
     lv_obj_clear_flag(p, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(p, LV_OBJ_FLAG_CLICKABLE);
 
@@ -704,6 +714,7 @@ static lv_obj_t *nav_panel_create(lv_obj_t *screen, const char *title_text,
     lv_label_set_text(title, title_text);
     lv_obj_set_style_text_color(title, lv_color_hex(UI_TEXT), 0);
     lv_obj_set_style_text_font(title, &p4_font_28, 0);
+    ui_title(title);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 30, 20);
 
     lv_obj_t *close = create_button(p, "CLOSE", 150, 50);
@@ -787,7 +798,8 @@ static lv_obj_t *modal_create(lv_obj_t *screen, int w, int h, lv_obj_t **panel_o
     lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(p, 2, 0);
     lv_obj_set_style_border_color(p, lv_color_hex(UI_AMBER), 0);
-    lv_obj_set_style_radius(p, 18, 0);
+    ui_frame(p, UI_AMBER, 2);
+    lv_obj_set_style_radius(p, UI_R(18), 0);
     lv_obj_clear_flag(p, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(p, LV_OBJ_FLAG_CLICKABLE);                   /* taps on it stay on it */
     *panel_out = p;
@@ -897,7 +909,7 @@ static void group_dialog_open(void)
 
     /* Short title on one line; the room goes in the line under it (a long
      * "PLAY TOGETHER WITH <room>" wrapped onto that line and covered it). */
-    ui_text(group_panel, "PLAY TOGETHER", &p4_font_28, UI_TEXT, 28, 20, 0);
+    ui_title(ui_text(group_panel, "PLAY TOGETHER", &p4_font_28, UI_TEXT, 28, 20, 0));
     char sub[96];
     snprintf(sub, sizeof(sub), "Rooms switched on play the same music as %s.",
              lyrion_players[sel].short_name);
@@ -915,7 +927,7 @@ static void group_dialog_open(void)
         lv_obj_set_pos(r, 28, 100 + row * 68);
         lv_obj_set_style_bg_color(r, lv_color_hex(UI_BUTTON), 0);
         lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(r, 12, 0);
+        lv_obj_set_style_radius(r, UI_R(12), 0);
         lv_obj_set_style_border_width(r, 1, 0);
         lv_obj_set_style_border_color(r, lv_color_hex(UI_EDGE), 0);
         lv_obj_clear_flag(r, LV_OBJ_FLAG_SCROLLABLE);
@@ -1009,7 +1021,7 @@ static void sleep_picker_create(lv_obj_t *screen)
     lv_obj_remove_style_all(amp);
     lv_obj_set_size(amp, 870, 58);
     lv_obj_set_pos(amp, 30, 344);
-    lv_obj_set_style_radius(amp, 12, 0);
+    lv_obj_set_style_radius(amp, UI_R(12), 0);
     lv_obj_set_style_border_width(amp, 1, 0);
     lv_obj_set_style_border_color(amp, lv_color_hex(UI_EDGE), 0);
     lv_obj_clear_flag(amp, LV_OBJ_FLAG_SCROLLABLE);
@@ -1103,7 +1115,7 @@ static void rooms_create(lv_obj_t *screen)
         lv_obj_set_pos(c->card, x0 + i * (w + gap), y0);
         lv_obj_set_style_bg_color(c->card, lv_color_hex(UI_BUTTON), 0);
         lv_obj_set_style_bg_opa(c->card, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(c->card, 18, 0);
+        lv_obj_set_style_radius(c->card, UI_R(18), 0);
         lv_obj_set_style_border_width(c->card, 1, 0);
         lv_obj_set_style_border_color(c->card, lv_color_hex(UI_EDGE), 0);
         lv_obj_clear_flag(c->card, LV_OBJ_FLAG_SCROLLABLE);
@@ -1117,7 +1129,7 @@ static void rooms_create(lv_obj_t *screen)
         lv_obj_set_pos(ph, 16, 16);
         lv_obj_set_style_bg_color(ph, lv_color_hex(UI_ALBUM_BG), 0);
         lv_obj_set_style_bg_opa(ph, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(ph, 10, 0);
+        lv_obj_set_style_radius(ph, UI_R(10), 0);
         lv_obj_clear_flag(ph, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_t *note = lv_label_create(ph);
         lv_label_set_text(note, LV_SYMBOL_AUDIO);
@@ -1281,8 +1293,8 @@ static void hub_refresh_locked(void)
     snprintf(t, sizeof(t), "%s / %s  " LV_SYMBOL_BULLET "  %u min",
              (ss_play_mode >= 0 && ss_play_mode < 5)
              ? (const char *const[]){ "Off", "Album art", "Cover wall", "Big text", "VU meters" }[ss_play_mode] : "Off",
-             (ss_pause_mode >= 0 && ss_pause_mode < 5)
-             ? (const char *const[]){ "Clock", "Clock + cover", "Analog clock", "Cover wall", "Weather" }[ss_pause_mode] : "Clock",
+             (ss_pause_mode >= 0 && ss_pause_mode < 6)
+             ? (const char *const[]){ "Clock", "Clock + cover", "Analog clock", "Cover wall", "Weather", "Album art" }[ss_pause_mode] : "Clock",
              (unsigned)ss_timeout_min);
     lv_label_set_text(hub_subtitles[4], t);
     snprintf(t, sizeof(t), "Wake-up music for %s",
@@ -1316,7 +1328,7 @@ static void hub_create(lv_obj_t *screen)
         lv_obj_set_pos(tile, 30 + (i % 2) * 444, 90 + (i / 2) * 104);
         lv_obj_set_style_bg_color(tile, lv_color_hex(UI_BUTTON), 0);
         lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(tile, 18, 0);
+        lv_obj_set_style_radius(tile, UI_R(18), 0);
         lv_obj_set_style_border_width(tile, 1, 0);
         lv_obj_set_style_border_color(tile, lv_color_hex(UI_EDGE), 0);
         lv_obj_set_style_bg_color(tile, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
@@ -1330,7 +1342,7 @@ static void hub_create(lv_obj_t *screen)
         lv_obj_align(icon_box, LV_ALIGN_LEFT_MID, 20, 0);
         lv_obj_set_style_bg_color(icon_box, lv_color_hex(UI_ACCENT_DARK), 0);
         lv_obj_set_style_bg_opa(icon_box, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(icon_box, 16, 0);
+        lv_obj_set_style_radius(icon_box, UI_R(16), 0);
         lv_obj_clear_flag(icon_box, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_t *icon = lv_label_create(icon_box);
         lv_label_set_text(icon, icons[i]);
@@ -1439,6 +1451,15 @@ static void nav_tab_event_cb(lv_event_t *e)
         case TAB_SETTINGS: hub_show(); break;
         default: break;
     }
+    /* Light the tapped tab straight away.  (Library and Queue only appear once
+     * their list has arrived; until then the tab check below would still say
+     * the old one, so the tap holds for a few seconds.) */
+    const int tapped = (int)(intptr_t)lv_event_get_user_data(e);
+    if (tapped >= 0 && tapped < TAB_COUNT) {
+        nav_tab_pending = tapped;
+        nav_tab_pending_tick = lv_tick_get();
+        nav_show_tab(tapped);
+    }
 }
 
 static bool nav_visible(lv_obj_t *o) { return o != NULL && !lv_obj_has_flag(o, LV_OBJ_FLAG_HIDDEN); }
@@ -1459,10 +1480,25 @@ static int nav_current_tab(void)
 static void nav_style_tab(int i, bool on)
 {
     lv_obj_t *tab = nav_tabs[i];
-    lv_obj_set_style_bg_opa(tab, on ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
     const uint32_t col = on ? UI_ACCENT : UI_TEXT_DIM;
     lv_obj_set_style_text_color(lv_obj_get_child(tab, 0), lv_color_hex(col), 0);
     lv_obj_set_style_text_color(lv_obj_get_child(tab, 1), lv_color_hex(col), 0);
+}
+
+#define NAV_TAB_X(i)   ((i) * 204 + 14)
+
+/* Mark tab `now` as the current one: its label lights up and the highlight
+ * slides over to it. */
+static void nav_show_tab(int now)
+{
+    if (now == nav_tab_shown) return;
+    for (int i = 0; i < TAB_COUNT; i++) nav_style_tab(i, i == now);
+    if (nav_pill != NULL) {
+        /* jumps straight there: sliding it while the new panel is being drawn
+         * (about 65 ms a frame) looked jerky on the display */
+        lv_obj_set_x(nav_pill, NAV_TAB_X(now));
+    }
+    nav_tab_shown = now;
 }
 
 /* ---- Now Playing FAV button ------------------------------------------------
@@ -1516,10 +1552,10 @@ static void nav_sync_timer_cb(lv_timer_t *t)
 {
     (void)t;
     const int now = nav_current_tab();
-    if (now != nav_tab_shown) {
-        for (int i = 0; i < TAB_COUNT; i++) nav_style_tab(i, i == now);
-        nav_tab_shown = now;
+    if (nav_tab_pending >= 0 && (now == nav_tab_pending || lv_tick_elaps(nav_tab_pending_tick) > 4000U)) {
+        nav_tab_pending = -1;                 /* the tapped tab is up (or never came) */
     }
+    if (nav_tab_pending < 0) nav_show_tab(now);
     nav_room_chip_refresh();
     rooms_refresh_locked();
     sleep_refresh_locked();
@@ -1573,16 +1609,32 @@ static void nav_create(lv_obj_t *screen)
     lv_obj_set_style_border_color(nav_bar, lv_color_hex(UI_EDGE), 0);
     lv_obj_clear_flag(nav_bar, LV_OBJ_FLAG_SCROLLABLE);
 
+    /* One highlight that slides to the current tab (made first, so it sits
+     * behind the tabs). */
+    nav_pill = lv_obj_create(nav_bar);
+    lv_obj_remove_style_all(nav_pill);
+    if (UI_LOOK.tab_underline) {        /* this theme marks the tab with a line under it */
+        lv_obj_set_size(nav_pill, 176, 3);
+        lv_obj_set_pos(nav_pill, NAV_TAB_X(0), 57);
+    } else {
+        lv_obj_set_size(nav_pill, 176, 52);
+        lv_obj_set_pos(nav_pill, NAV_TAB_X(0), 6);
+    }
+    lv_obj_set_style_radius(nav_pill, UI_R(14), 0);
+    lv_obj_set_style_bg_color(nav_pill, lv_color_hex(UI_LOOK.tab_underline ? UI_ACCENT : UI_ACCENT_DARK), 0);
+    lv_obj_set_style_bg_opa(nav_pill, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(nav_pill, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+
     for (int i = 0; i < TAB_COUNT; i++) {
         lv_obj_t *tab = lv_obj_create(nav_bar);
         lv_obj_remove_style_all(tab);
         lv_obj_set_size(tab, 176, 52);
-        lv_obj_set_pos(tab, i * 204 + 14, 6);
-        lv_obj_set_style_radius(tab, 14, 0);
+        lv_obj_set_pos(tab, NAV_TAB_X(i), 6);
+        lv_obj_set_style_radius(tab, UI_R(14), 0);
         lv_obj_set_style_bg_color(tab, lv_color_hex(UI_ACCENT_DARK), 0);
         lv_obj_set_style_bg_opa(tab, LV_OPA_TRANSP, 0);
         lv_obj_set_style_bg_color(tab, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
-        lv_obj_set_style_bg_opa(tab, LV_OPA_COVER, LV_STATE_PRESSED);
+        lv_obj_set_style_bg_opa(tab, LV_OPA_60, LV_STATE_PRESSED);
         lv_obj_clear_flag(tab, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(tab, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_ext_click_area(tab, 6);

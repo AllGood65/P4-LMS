@@ -192,7 +192,7 @@ static void lms_rebuild_list_locked(void)
         lv_obj_set_pos(row, 6, 4 + i * 64);
         lv_obj_set_style_bg_color(row, lv_color_hex(current ? UI_ACCENT_DARK : UI_BUTTON), 0);
         lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(row, 10, 0);
+        lv_obj_set_style_radius(row, UI_R(10), 0);
         lv_obj_set_style_border_width(row, current ? 2 : 1, 0);
         lv_obj_set_style_border_color(row, lv_color_hex(current ? UI_ACCENT_GLOW : UI_EDGE), 0);
         lv_obj_set_style_bg_color(row, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
@@ -259,12 +259,16 @@ static void lms_create(void)
     lms_overlay = lv_obj_create(lv_screen_active());
     lv_obj_remove_style_all(lms_overlay);
     lv_obj_set_size(lms_overlay, PANEL_W, PANEL_H);
+    /* the coloured trim is drawn after (on top of) the panel's contents,
+     * so a list or bar reaching the edge never hides it */
+    lv_obj_set_style_border_post(lms_overlay, true, 0);
     lv_obj_set_pos(lms_overlay, PANEL_X, PANEL_Y);
     lv_obj_set_style_bg_color(lms_overlay, lv_color_hex(UI_PANEL), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(lms_overlay, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(lms_overlay, 2, LV_PART_MAIN);
     lv_obj_set_style_border_color(lms_overlay, lv_color_hex(UI_AMBER), LV_PART_MAIN);
-    lv_obj_set_style_radius(lms_overlay, 16, LV_PART_MAIN);
+    ui_frame(lms_overlay, UI_AMBER, 2);
+    lv_obj_set_style_radius(lms_overlay, UI_R(16), LV_PART_MAIN);
     lv_obj_clear_flag(lms_overlay, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(lms_overlay, LV_OBJ_FLAG_CLICKABLE);
 
@@ -272,6 +276,7 @@ static void lms_create(void)
     lv_label_set_text(title, "LYRION SERVER");
     lv_obj_set_style_text_color(title, lv_color_hex(UI_TEXT), 0);
     lv_obj_set_style_text_font(title, &p4_font_28, 0);
+    ui_title(title);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 30, 20);
 
     lv_obj_t *close = create_button(lms_overlay, "CLOSE", 150, 50);
@@ -633,12 +638,16 @@ static void create_source_browser(lv_obj_t *screen)
     source_overlay = lv_obj_create(screen);
     lv_obj_remove_style_all(source_overlay);
     lv_obj_set_size(source_overlay, PANEL_W, PANEL_H);
+    /* the coloured trim is drawn after (on top of) the panel's contents,
+     * so a list or bar reaching the edge never hides it */
+    lv_obj_set_style_border_post(source_overlay, true, 0);
     lv_obj_set_pos(source_overlay, PANEL_X, PANEL_Y);
     lv_obj_set_style_bg_color(source_overlay, lv_color_hex(UI_PANEL), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(source_overlay, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(source_overlay, 2, LV_PART_MAIN);
     lv_obj_set_style_border_color(source_overlay, lv_color_hex(UI_AMBER), LV_PART_MAIN);
-    lv_obj_set_style_radius(source_overlay, 16, LV_PART_MAIN);
+    ui_frame(source_overlay, UI_AMBER, 2);
+    lv_obj_set_style_radius(source_overlay, UI_R(16), LV_PART_MAIN);
     lv_obj_clear_flag(source_overlay, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(source_overlay, LV_OBJ_FLAG_HIDDEN);
 
@@ -680,6 +689,7 @@ static void create_source_browser(lv_obj_t *screen)
     lv_label_set_text(source_title_label, "LIBRARY");
     lv_obj_set_style_text_color(source_title_label, lv_color_hex(UI_TEXT), 0);
     lv_obj_set_style_text_font(source_title_label, &p4_font_28, 0);
+    ui_title(source_title_label);
     /* Long album names end in "..." instead of running under BACK/CLOSE. */
     lv_obj_set_width(source_title_label, 600);      /* leaves room for the loading spinner */
     lv_label_set_long_mode(source_title_label, LV_LABEL_LONG_DOT);
@@ -704,10 +714,13 @@ static void create_source_browser(lv_obj_t *screen)
 
     source_detail_album_label = lv_label_create(source_overlay);
     lv_label_set_text(source_detail_album_label, "");
-    lv_obj_set_size(source_detail_album_label, 220, 68);      /* two lines, then "..." */
+    /* up to three lines, then "..." (in the 28 px font only ONE line fitted
+     * the space, so most album names were cut short; the full name is also
+     * in the title above) */
+    lv_obj_set_size(source_detail_album_label, 220, 70);
     lv_label_set_long_mode(source_detail_album_label, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_color(source_detail_album_label, lv_color_hex(UI_TEXT), 0);
-    lv_obj_set_style_text_font(source_detail_album_label, &p4_font_28, 0);
+    lv_obj_set_style_text_font(source_detail_album_label, &p4_font_18, 0);
     lv_obj_set_style_text_align(source_detail_album_label, LV_TEXT_ALIGN_LEFT, 0);
     lv_obj_set_pos(source_detail_album_label, 30, 130);
     lv_obj_add_flag(source_detail_album_label, LV_OBJ_FLAG_HIDDEN);
@@ -763,7 +776,10 @@ static void create_source_browser(lv_obj_t *screen)
      * in the foreground so no item button can appear underneath it. */
     source_nav_bar = lv_obj_create(source_overlay);
     lv_obj_remove_style_all(source_nav_bar);
-    lv_obj_set_size(source_nav_bar, 930, 78);
+    /* inside the panel's 2 px trim, rounded like its bottom corners (the bar
+     * is the panel's colour, so the rounded top corners don't show) */
+    lv_obj_set_size(source_nav_bar, PANEL_W - 4, 78);
+    lv_obj_set_style_radius(source_nav_bar, UI_R(14), LV_PART_MAIN);
     lv_obj_set_pos(source_nav_bar, 0, PANEL_H - 82);
     lv_obj_set_style_bg_color(source_nav_bar, lv_color_hex(UI_PANEL), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(source_nav_bar, LV_OPA_COVER, LV_PART_MAIN);

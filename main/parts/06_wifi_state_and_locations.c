@@ -50,8 +50,16 @@ static int lms_profile_count = 0;
 static int lms_active = -1;
 static volatile bool lms_restart_pending = false;
 
+static void lms_profiles_save_job(void *arg);
+/* (called from the Library task too, whose stack is in PSRAM) */
 static void lms_profiles_save(void)
 {
+    flash_safe_call(lms_profiles_save_job, NULL);
+}
+
+static void lms_profiles_save_job(void *arg)
+{
+    (void)arg;
     nvs_handle_t nvs;
     if (nvs_open(PLAYER_NVS_NAMESPACE, NVS_READWRITE, &nvs) != ESP_OK) return;
     if (nvs_set_blob(nvs, LMS_NVS_BLOB, lms_profiles, sizeof(lms_profile_t) * lms_profile_count) == ESP_OK &&

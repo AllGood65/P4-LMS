@@ -21,12 +21,30 @@ static lv_image_dsc_t about_qr_dsc;
 #define ABOUT_QR_QUIET      4       /* white border, in squares (the QR standard asks for 4) */
 #define ABOUT_QR_MAX_VER    10      /* far more than a web address needs */
 
+/* How fast the screen is drawing (03_shared_state.c), refreshed each second. */
+static lv_obj_t *about_perf_label = NULL;
+static lv_timer_t *about_perf_timer = NULL;
+
+static void about_perf_timer_cb(lv_timer_t *t)
+{
+    (void)t;
+    if (about_perf_label == NULL) return;
+    char line[112];
+    ui_perf_text(line, sizeof(line));
+    lv_label_set_text(about_perf_label, line);
+}
+
 /* The panel is being deleted: free the QR picture with it. */
 static void about_delete_event_cb(lv_event_t *e)
 {
     (void)e;
     upd_about_forget();                        /* its update line and button go too */
     bat_about_forget();                        /* and the battery line */
+    if (about_perf_timer != NULL) {
+        lv_timer_delete(about_perf_timer);
+        about_perf_timer = NULL;
+    }
+    about_perf_label = NULL;
     if (about_qr_pixels != NULL) {
         heap_caps_free(about_qr_pixels);
         about_qr_pixels = NULL;
@@ -147,6 +165,11 @@ static void about_show(void)
         lv_obj_set_width(l, 580);
         lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
     }
+
+    /* How fast the screen draws - small print at the bottom, for tuning. */
+    ui_perf_text(line, sizeof(line));
+    about_perf_label = ui_text(about_overlay, line, &p4_font_14, UI_TEXT_DIM, 30, 488, 0);
+    if (about_perf_timer == NULL) about_perf_timer = lv_timer_create(about_perf_timer_cb, 1000, NULL);
 
     /* QR code of the number address (it works even where ".local" names
      * don't, e.g. on some Android phones). */

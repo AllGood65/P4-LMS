@@ -35,7 +35,7 @@ static lv_obj_t *create_button(
     );
 
     /* Flat, softly rounded look (no theme drop-shadow). */
-    lv_obj_set_style_radius(button, 10, LV_PART_MAIN);
+    lv_obj_set_style_radius(button, UI_R(10), LV_PART_MAIN);
     lv_obj_set_style_shadow_width(button, 0, LV_PART_MAIN);
 
     /* Press feedback that works for every button colour: the fill fades,
@@ -43,14 +43,29 @@ static lv_obj_t *create_button(
     lv_obj_set_style_bg_opa(button, LV_OPA_70, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_border_color(button, lv_color_hex(UI_ACCENT_GLOW), LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_translate_y(button, 2, LV_PART_MAIN | LV_STATE_PRESSED);
+    /* ...and it eases in and out of that instead of snapping: quick on the
+     * way down (so a tap feels instant), softer coming back up. */
+    if (ui_anim_on) {
+        static const lv_style_prop_t props[] = { LV_STYLE_BG_OPA, LV_STYLE_TRANSLATE_Y, LV_STYLE_BORDER_COLOR, 0 };
+        static lv_style_transition_dsc_t press, release;
+        static bool made = false;
+        if (!made) {
+            lv_style_transition_dsc_init(&press, props, lv_anim_path_ease_out, 70, 0, NULL);
+            lv_style_transition_dsc_init(&release, props, lv_anim_path_ease_out, 180, 0, NULL);
+            made = true;
+        }
+        lv_obj_set_style_transition(button, &press, LV_PART_MAIN | LV_STATE_PRESSED);
+        lv_obj_set_style_transition(button, &release, LV_PART_MAIN);
+    }
+    /* outline: per the theme's style (none, quiet, or in the accent colour) */
     lv_obj_set_style_border_width(
         button,
-        1,
+        UI_LOOK.btn_border,
         LV_PART_MAIN
     );
     lv_obj_set_style_border_color(
         button,
-        lv_color_hex(UI_ACCENT_DARK),
+        lv_color_hex(UI_LOOK.btn_accent ? UI_ACCENT : UI_ACCENT_DARK),
         LV_PART_MAIN
     );
 
@@ -123,7 +138,7 @@ static lv_obj_t *create_source_item_button(
         lv_obj_set_size(folder_body, 24, 16);
         lv_obj_set_style_bg_color(folder_body, lv_color_hex(UI_AMBER), 0);
         lv_obj_set_style_bg_opa(folder_body, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(folder_body, 2, 0);
+        lv_obj_set_style_radius(folder_body, UI_R(2), 0);
         lv_obj_align(folder_body, LV_ALIGN_LEFT_MID, 12, 2);
 
         lv_obj_t *folder_tab = lv_obj_create(button);
@@ -131,7 +146,7 @@ static lv_obj_t *create_source_item_button(
         lv_obj_set_size(folder_tab, 10, 5);
         lv_obj_set_style_bg_color(folder_tab, lv_color_hex(UI_AMBER), 0);
         lv_obj_set_style_bg_opa(folder_tab, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(folder_tab, 2, 0);
+        lv_obj_set_style_radius(folder_tab, UI_R(2), 0);
         lv_obj_align(folder_tab, LV_ALIGN_LEFT_MID, 13, -7);
     } else if (is_song) {
         lv_obj_t *icon = lv_label_create(button);

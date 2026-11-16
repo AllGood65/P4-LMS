@@ -134,9 +134,10 @@ static void qs_create(void)
     lv_obj_set_pos(panel, 14, 10);
     lv_obj_set_style_bg_color(panel, lv_color_hex(UI_PANEL), 0);
     lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(panel, 14, 0);
+    lv_obj_set_style_radius(panel, UI_R(14), 0);
     lv_obj_set_style_border_width(panel, 2, 0);
     lv_obj_set_style_border_color(panel, lv_color_hex(UI_AMBER), 0);
+    ui_frame(panel, UI_AMBER, 2);
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *title = lv_label_create(panel);
@@ -328,7 +329,7 @@ static lv_obj_t *source_build_tile(int i, lv_obj_t *parent)
     lv_obj_t *tile = lv_obj_create(parent);
     lv_obj_remove_style_all(tile);
     lv_obj_set_size(tile, tile_w - 10, tile_h);
-    lv_obj_set_style_radius(tile, 12, 0);
+    lv_obj_set_style_radius(tile, UI_R(12), 0);
     lv_obj_set_style_bg_color(tile, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, LV_STATE_PRESSED);
     lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
@@ -342,7 +343,7 @@ static lv_obj_t *source_build_tile(int i, lv_obj_t *parent)
     lv_obj_set_pos(ph, 14, 0);
     lv_obj_set_style_bg_color(ph, lv_color_hex(UI_ALBUM_BG), 0);
     lv_obj_set_style_bg_opa(ph, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(ph, 8, 0);
+    lv_obj_set_style_radius(ph, UI_R(8), 0);
     lv_obj_clear_flag(ph, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_t *note = lv_label_create(ph);
     lv_label_set_text(note, LV_SYMBOL_AUDIO);
@@ -381,7 +382,7 @@ static lv_obj_t *source_build_tile(int i, lv_obj_t *parent)
     lv_obj_set_pos(plus, 14 + SOURCE_GRID_COVER - 40, SOURCE_GRID_COVER - 40);
     lv_obj_set_style_bg_color(plus, lv_color_hex(UI_ACCENT), 0);
     lv_obj_set_style_bg_opa(plus, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(plus, 8, 0);
+    lv_obj_set_style_radius(plus, UI_R(8), 0);
     lv_obj_set_style_bg_color(plus, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
     lv_obj_clear_flag(plus, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(plus, LV_OBJ_FLAG_CLICKABLE);
@@ -685,7 +686,7 @@ static void source_render_queue(void)
         lv_obj_set_pos(card, SOURCE_GRID_X0, 96);
         lv_obj_set_style_bg_color(card, lv_color_hex(UI_ACCENT_DARK), 0);
         lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(card, 12, 0);
+        lv_obj_set_style_radius(card, UI_R(12), 0);
         lv_obj_set_style_border_width(card, 2, 0);
         lv_obj_set_style_border_color(card, lv_color_hex(UI_ACCENT), 0);
         lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);

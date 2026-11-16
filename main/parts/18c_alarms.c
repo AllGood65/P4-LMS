@@ -390,7 +390,7 @@ static void alarms_render_job(void *arg)
         lv_obj_set_pos(row, 0, i * ALARM_ROW_H);
         lv_obj_set_style_bg_color(row, lv_color_hex(UI_BUTTON), 0);
         lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(row, 16, 0);
+        lv_obj_set_style_radius(row, UI_R(16), 0);
         lv_obj_set_style_border_width(row, 1, 0);
         lv_obj_set_style_border_color(row, lv_color_hex(UI_EDGE), 0);
         lv_obj_set_style_bg_color(row, lv_color_hex(UI_ACCENT_DARK), LV_STATE_PRESSED);
@@ -478,7 +478,7 @@ static void alarms_create(lv_obj_t *screen)
     lv_obj_remove_style_all(amp);
     lv_obj_set_size(amp, 870, 54);
     lv_obj_set_pos(amp, 30, PANEL_H - 68);
-    lv_obj_set_style_radius(amp, 12, 0);
+    lv_obj_set_style_radius(amp, UI_R(12), 0);
     lv_obj_set_style_border_width(amp, 1, 0);
     lv_obj_set_style_border_color(amp, lv_color_hex(UI_EDGE), 0);
     lv_obj_clear_flag(amp, LV_OBJ_FLAG_SCROLLABLE);
@@ -909,7 +909,7 @@ static void alarm_playlist_picker_open(void)
 static void alarm_playlist_picker_create(lv_obj_t *screen)
 {
     apl_overlay = modal_create(screen, 560, 440, &apl_panel);
-    ui_text(apl_panel, "CHOOSE A PLAYLIST", &p4_font_28, UI_TEXT, 28, 18, 0);
+    ui_title(ui_text(apl_panel, "CHOOSE A PLAYLIST", &p4_font_28, UI_TEXT, 28, 18, 0));
     apl_list = lv_obj_create(apl_panel);
     lv_obj_remove_style_all(apl_list);
     lv_obj_set_size(apl_list, 500, 440 - 64 - 84);

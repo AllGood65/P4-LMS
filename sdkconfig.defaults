@@ -11,6 +11,14 @@ CONFIG_SPIRAM=y
 # Secure (https) connections keep their working memory in PSRAM, so the
 # Wi-Fi link to the ESP32-C6 doesn't run short (updates from GitHub)
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+# Build for speed (-O2) rather than for debugging (-Og): the interface is
+# drawn in software, so this shortens every frame.  The refresh rate stays
+# at LVGL's 30 a second: at 60 the drawing task used a whole CPU core and
+# slowed album art and the network (tried in a 2.9 test build)
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+# LVGL draws with one thread.  Two (LV_OS_PTHREAD/FREERTOS + two draw units)
+# were tried in 2.9 tests: with internal-RAM stacks they starved the Wi-Fi
+# link; with PSRAM stacks they drew full panels slower than one thread does.
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_DRAW_BUF_ALIGN=64
 CONFIG_LV_USE_PPA=y

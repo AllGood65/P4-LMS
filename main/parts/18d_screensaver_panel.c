@@ -10,9 +10,10 @@
 
 static bool web_settings_save(void);           /* 19_web_settings.c */
 
-#define SSP_CHOICES 5
+#define SSP_CHOICES 5             /* while playing */
+#define SSP_PAUSE_CHOICES 6       /* when paused */
 static lv_obj_t *ssp_play_btn[SSP_CHOICES] = { NULL };
-static lv_obj_t *ssp_pause_btn[SSP_CHOICES] = { NULL };
+static lv_obj_t *ssp_pause_btn[SSP_PAUSE_CHOICES] = { NULL };
 static lv_obj_t *ssp_start_lbl = NULL;
 static lv_obj_t *ssp_deep_lbl = NULL;
 static lv_obj_t *ssp_slider[3] = { NULL };     /* album art, standby, deep dim */
@@ -36,10 +37,8 @@ static void ssp_style_choice(lv_obj_t *b, bool on)
 
 static void ssp_refresh(void)
 {
-    for (int i = 0; i < SSP_CHOICES; i++) {
-        ssp_style_choice(ssp_play_btn[i], ss_play_mode == i);
-        ssp_style_choice(ssp_pause_btn[i], ss_pause_mode == i);
-    }
+    for (int i = 0; i < SSP_CHOICES; i++) ssp_style_choice(ssp_play_btn[i], ss_play_mode == i);
+    for (int i = 0; i < SSP_PAUSE_CHOICES; i++) ssp_style_choice(ssp_pause_btn[i], ss_pause_mode == i);
     char t[24];
     snprintf(t, sizeof(t), "%u min", (unsigned)ss_timeout_min);
     lv_label_set_text(ssp_start_lbl, t);
@@ -61,10 +60,11 @@ static void ssp_choice_event_cb(lv_event_t *e)
     else            ss_pause_mode = which - 10;
     /* PREVIEW shows the look just tapped. */
     static const int play_view[SSP_CHOICES]  = { -1, SS_VIEW_ART, SS_VIEW_WALL, SS_VIEW_BIGTEXT, SS_VIEW_VU };
-    static const int pause_view[SSP_CHOICES] = { SS_VIEW_CLOCK, SS_VIEW_CLOCK_COVER, SS_VIEW_ANALOG,
-                                                 SS_VIEW_WALL, SS_VIEW_WEATHER };
+    static const int pause_view[SSP_PAUSE_CHOICES] = { SS_VIEW_CLOCK, SS_VIEW_CLOCK_COVER, SS_VIEW_ANALOG,
+                                                       SS_VIEW_WALL, SS_VIEW_WEATHER, SS_VIEW_ART };
     ss_preview_view = (which < 10) ? play_view[which] : pause_view[which - 10];
-    if (ss_preview_view == SS_VIEW_CLOCK_COVER && !ss_have_track) ss_preview_view = SS_VIEW_CLOCK;
+    if (which >= 10 && (ss_preview_view == SS_VIEW_CLOCK_COVER || ss_preview_view == SS_VIEW_ART) &&
+        !ss_have_track) ss_preview_view = SS_VIEW_CLOCK;
     ssp_refresh();
     ssp_save();
 }
@@ -172,8 +172,8 @@ static void ssp_create(lv_obj_t *screen)
 
     static const char *const play_names[SSP_CHOICES]  = { "Off", "Album art", "Cover wall",
                                                           "Big text", "VU meters" };
-    static const char *const pause_names[SSP_CHOICES] = { "Clock", "Clock + cover", "Analog clock",
-                                                          "Cover wall", "Weather" };
+    static const char *const pause_names[SSP_PAUSE_CHOICES] = { "Clock", "Clock + cover", "Analog",
+                                                                "Cover wall", "Weather", "Album art" };
 
     /* PREVIEW up in the title bar, left of BACK. */
     lv_obj_t *prev = create_button(p, LV_SYMBOL_EYE_OPEN "  PREVIEW", 150, 50);
@@ -186,8 +186,10 @@ static void ssp_create(lv_obj_t *screen)
         ssp_play_btn[i] = create_button(p, play_names[i], 164, 46);
         lv_obj_set_pos(ssp_play_btn[i], 30 + i * 174, 110);
         lv_obj_add_event_cb(ssp_play_btn[i], ssp_choice_event_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
-        ssp_pause_btn[i] = create_button(p, pause_names[i], 164, 46);
-        lv_obj_set_pos(ssp_pause_btn[i], 30 + i * 174, 198);
+    }
+    for (int i = 0; i < SSP_PAUSE_CHOICES; i++) {          /* six to a row: narrower, same right edge as the row above */
+        ssp_pause_btn[i] = create_button(p, pause_names[i], 134, 46);
+        lv_obj_set_pos(ssp_pause_btn[i], 30 + i * 145, 198);
         lv_obj_add_event_cb(ssp_pause_btn[i], ssp_choice_event_cb, LV_EVENT_CLICKED, (void *)(intptr_t)(i + 10));
     }
 
@@ -471,7 +473,7 @@ static void vsp_create(lv_obj_t *screen)
         lv_obj_align(strip, LV_ALIGN_BOTTOM_MID, 0, 4);
         lv_obj_set_style_bg_color(strip, lv_color_hex(vis_palette_colors[i][4]), 0);
         lv_obj_set_style_bg_opa(strip, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(strip, 2, 0);
+        lv_obj_set_style_radius(strip, UI_R(2), 0);
         lv_obj_clear_flag(strip, LV_OBJ_FLAG_CLICKABLE);
         vsp_pal_btn[i] = b;
     }

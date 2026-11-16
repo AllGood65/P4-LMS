@@ -571,8 +571,153 @@ static bool update_album_art(const char *player_id)
     if (update_album_art_fetch(player_id, first_png)) {
         return true;
     }
+    /* The server never answered (it can sit on a stream's picture for a long
+     * time): asking again in the other format would only wait as long again,
+     * and nothing else on Now Playing updates while this waits. */
+    if (album_art_last_status <= 0) {
+        return false;
+    }
     ESP_LOGW(TAG, "Album art: retrying as %s", first_png ? "JPEG" : "PNG");
     return update_album_art_fetch(player_id, !first_png);
+}
+
+
+/* ---- Album art, fetched by its own task ---------------------------------
+ * The status task hands over "this room should be showing this cover" and
+ * carries on; art_task downloads and decodes it.  A cover the server is slow
+ * with (a stream's picture can take seconds, or never come) used to hold up
+ * every other update on Now Playing while it waited.  Only the newest
+ * request counts: the queue holds one, and a new one replaces it.  The task
+ * also looks again once a second, which drives the retry and the radio
+ * re-check below. */
+typedef struct {
+    char   player[sizeof(lyrion_players[0].id)];
+    char   key[256];
+    double duration;
+    char   fav[sizeof(np_fav_url)];
+} art_req_t;
+
+static QueueHandle_t art_queue = NULL;
+
+static void art_decide(const art_req_t *r)
+{
+    if (r->key[0] == '\0') return;                       /* nothing to show (offline) */
+    /* A room changed since this was asked: its own request is on the way. */
+    const int cur = current_player_index;
+    if (cur < 0 || cur >= lyrion_player_count || strcmp(lyrion_players[cur].id, r->player) != 0) return;
+
+    /* Covers seen recently come straight from memory (not streams: their
+     * picture can change while the key stays the same). */
+    const bool cacheable = r->duration > 0.0;
+    if (cacheable && strcmp(r->key, last_album_art_key) != 0 && album_art_cache_show(r->key)) {
+        snprintf(last_album_art_key, sizeof(last_album_art_key), "%s", r->key);
+        return;
+    }
+    if (cacheable) snprintf(album_art_cache_store_key, sizeof(album_art_cache_store_key), "%s", r->key);
+
+    /* A cover that failed to download is tried again after 30 s, not on
+     * every poll. */
+    static char     art_failed_key[256] = "";
+    static char     art_shown_stream[sizeof(np_fav_url)] = "";   /* radio stream the shown picture came from */
+    static uint32_t art_failed_ms = 0;
+    static uint32_t art_retry_ms = 30000U;  /* doubles each time the same cover fails, up to 5 min */
+    static uint32_t art_recheck_ms = 0;    /* new station: look again a few seconds later */
+    const uint32_t  art_now_ms = esp_log_timestamp();
+
+    /* Right after a station change the server can still hand out the last
+     * station's picture, so a new station's picture is fetched once more. */
+    if (art_recheck_ms != 0 && (int32_t)(art_now_ms - art_recheck_ms) >= 0) {
+        art_recheck_ms = 0;
+        if (strcmp(r->key, last_album_art_key) == 0) {
+            ESP_LOGI(TAG, "Radio: checking the new station's picture again");
+            last_album_art_key[0] = '\0';
+        }
+    }
+
+    if (strcmp(r->key, last_album_art_key) != 0 &&
+        !(strcmp(r->key, art_failed_key) == 0 && art_now_ms - art_failed_ms < art_retry_ms)) {
+        ESP_LOGI(TAG, "Album-art change detected: [%s]", r->key);
+
+        /* Keep the current cover until the replacement downloads and decodes successfully. */
+        album_art_last_status = 0;
+        if (update_album_art(r->player)) {
+            strncpy(
+                last_album_art_key,
+                r->key,
+                sizeof(last_album_art_key) - 1
+            );
+            last_album_art_key[sizeof(last_album_art_key) - 1] = '\0';
+            art_failed_key[0] = '\0';
+            if (r->duration <= 0.0 && strcmp(art_shown_stream, r->fav) != 0) {
+                art_recheck_ms = art_now_ms + 4000U;       /* a different station than before */
+                if (art_recheck_ms == 0) art_recheck_ms = 1;
+            }
+            snprintf(art_shown_stream, sizeof(art_shown_stream), "%s", r->duration > 0.0 ? "" : r->fav);
+        } else if (album_art_last_status == 404) {
+            /* The server has no picture for this one.  On the same radio
+             * station (an advert, or a song without a picture): keep the
+             * station's last picture.  Anything else: the empty frame, not
+             * the previous album's cover.  No retry either way. */
+            if (r->duration <= 0.0 && r->fav[0] != '\0' && strcmp(art_shown_stream, r->fav) == 0) {
+                ESP_LOGI(TAG, "Radio: no picture for this one; keeping the station's last one");
+            } else {
+                ESP_LOGI(TAG, "No picture for this one");
+                clear_album_art();
+                art_shown_stream[0] = '\0';
+            }
+            snprintf(last_album_art_key, sizeof(last_album_art_key), "%s", r->key);
+            art_failed_key[0] = '\0';
+        } else {
+            if (strcmp(art_failed_key, r->key) != 0) art_retry_ms = 30000U;
+            else if (art_retry_ms < 300000U) art_retry_ms *= 2;
+            if (art_retry_ms > 300000U) art_retry_ms = 300000U;
+            ESP_LOGW(TAG, "Album-art update failed; keeping previous artwork (retry in %u s)",
+                     (unsigned)(art_retry_ms / 1000U));
+            snprintf(art_failed_key, sizeof(art_failed_key), "%s", r->key);
+            art_failed_ms = art_now_ms;
+        }
+    }
+    album_art_cache_store_key[0] = '\0';
+}
+
+static void art_task(void *arg)
+{
+    (void)arg;
+    static art_req_t cur;                                /* the newest request (kept off the stack) */
+    static art_req_t in;
+    bool have = false;
+    while (1) {
+        if (xQueueReceive(art_queue, &in, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            cur = in;
+            have = true;
+        }
+        if (have) art_decide(&cur);
+    }
+}
+
+/* From the status task: what the selected room should be showing now.
+ * An empty key (offline) stops any further fetching. */
+static void art_request(const char *player, const char *key, double duration, const char *fav)
+{
+    if (art_queue == NULL) {
+        art_queue = xQueueCreate(1, sizeof(art_req_t));
+        if (art_queue == NULL) return;
+        /* Downloads and decodes, but never touches the flash chip: its
+         * stack can live in PSRAM and costs no internal RAM. */
+        if (xTaskCreatePinnedToCoreWithCaps(art_task, "album_art", 12288, NULL, 4, NULL, 1,
+                                            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
+            ESP_LOGE(TAG, "Album art: task could not start");
+            vQueueDelete(art_queue);
+            art_queue = NULL;
+            return;
+        }
+    }
+    static art_req_t r;                                  /* only the status task calls this */
+    snprintf(r.player, sizeof(r.player), "%s", player != NULL ? player : "");
+    snprintf(r.key, sizeof(r.key), "%s", key != NULL ? key : "");
+    r.duration = duration;
+    snprintf(r.fav, sizeof(r.fav), "%s", fav != NULL ? fav : "");
+    xQueueOverwrite(art_queue, &r);
 }
 
 
@@ -1041,6 +1186,7 @@ static void update_lyrion_offline_ui(void)
 {
     ui_post(update_lyrion_offline_ui_job, NULL, 0);
     last_album_art_key[0] = '\0';
+    art_request("", "", 0.0, "");
     clear_album_art();
 }
 
@@ -1808,63 +1954,9 @@ static bool lyrion_get_status(void)
         );
     }
 
-    /* A cover that failed to download is tried again after 30 s, not on
-     * every poll. */
-    static char     art_failed_key[sizeof(album_art_key)] = "";
-    static char     art_shown_stream[sizeof(fav_url)] = "";   /* radio stream the shown picture came from */
-    static uint32_t art_failed_ms = 0;
-    static uint32_t art_recheck_ms = 0;    /* new station: look again a few seconds later */
-    const uint32_t  art_now_ms = esp_log_timestamp();
-
-    /* Right after a station change the server can still hand out the last
-     * station's picture, so a new station's picture is fetched once more. */
-    if (art_recheck_ms != 0 && (int32_t)(art_now_ms - art_recheck_ms) >= 0) {
-        art_recheck_ms = 0;
-        if (strcmp(album_art_key, last_album_art_key) == 0) {
-            ESP_LOGI(TAG, "Radio: checking the new station's picture again");
-            last_album_art_key[0] = '\0';
-        }
-    }
-
-    if (strcmp(album_art_key, last_album_art_key) != 0 &&
-        !(strcmp(album_art_key, art_failed_key) == 0 && art_now_ms - art_failed_ms < 30000U)) {
-        ESP_LOGI(TAG, "Album-art change detected: [%s]", album_art_key);
-
-        /* Keep the current cover until the replacement downloads and decodes successfully. */
-        album_art_last_status = 0;
-        if (update_album_art(player_id)) {
-            strncpy(
-                last_album_art_key,
-                album_art_key,
-                sizeof(last_album_art_key) - 1
-            );
-            last_album_art_key[sizeof(last_album_art_key) - 1] = '\0';
-            art_failed_key[0] = '\0';
-            if (duration <= 0.0 && strcmp(art_shown_stream, fav_url) != 0) {
-                art_recheck_ms = art_now_ms + 4000U;       /* a different station than before */
-                if (art_recheck_ms == 0) art_recheck_ms = 1;
-            }
-            snprintf(art_shown_stream, sizeof(art_shown_stream), "%s", duration > 0.0 ? "" : fav_url);
-        } else if (album_art_last_status == 404) {
-            /* The server has no picture for this one.  On the same radio
-             * station (an advert, or a song without a picture): keep the
-             * station's last picture.  Anything else: the empty frame, not
-             * the previous album's cover.  No retry either way. */
-            if (duration <= 0.0 && fav_url[0] != '\0' && strcmp(art_shown_stream, fav_url) == 0) {
-                ESP_LOGI(TAG, "Radio: no picture for this one; keeping the station's last one");
-            } else {
-                ESP_LOGI(TAG, "No picture for this one");
-                clear_album_art();
-                art_shown_stream[0] = '\0';
-            }
-            snprintf(last_album_art_key, sizeof(last_album_art_key), "%s", album_art_key);
-            art_failed_key[0] = '\0';
-        } else {
-            ESP_LOGW(TAG, "Album-art update failed; keeping previous artwork (retry in 30 s)");
-            snprintf(art_failed_key, sizeof(art_failed_key), "%s", album_art_key);
-            art_failed_ms = art_now_ms;
-        }
-    }
+    /* The cover is fetched by its own task (art_task, above), so a slow
+     * one never holds up the title, the time and the buttons. */
+    art_request(player_id, album_art_key, duration, fav_url);
 
 
     /* --------------------------------------------------------

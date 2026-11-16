@@ -183,9 +183,131 @@ static void album_art_show_job(void *arg)
     screensaver_cover_changed(true);
 }
 
+/* A cover smaller than the frame (Lyrion never enlarges a picture: a song
+ * with a 176x176 embedded picture arrives at 176x176) is enlarged here, once,
+ * with smooth (bilinear) scaling, so it fills the frame like the others.
+ * Returns a new buffer, or NULL to show the original as it is. */
+static uint8_t *album_art_enlarge(const uint8_t *src, uint32_t w, uint32_t h, uint32_t padded,
+                                  uint32_t *out_w, uint32_t *out_h, size_t *out_size)
+{
+    if (w == 0 || h == 0 || (w >= ALBUM_ART_WIDTH * 9U / 10U && h >= ALBUM_ART_HEIGHT * 9U / 10U)) {
+        return NULL;                      /* big enough already */
+    }
+    /* fit inside the frame, keeping the shape */
+    uint32_t nw = ALBUM_ART_WIDTH, nh = (uint32_t)((uint64_t)h * ALBUM_ART_WIDTH / w);
+    if (nh > ALBUM_ART_HEIGHT) {
+        nh = ALBUM_ART_HEIGHT;
+        nw = (uint32_t)((uint64_t)w * ALBUM_ART_HEIGHT / h);
+    }
+    if (nw < 2 || nh < 2 || w < 2 || h < 2) return NULL;
+    const size_t size = (size_t)nw * nh * 2U;
+    uint16_t *dst = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (dst == NULL) return NULL;
+    const uint16_t *in = (const uint16_t *)src;
+
+    for (uint32_t y = 0; y < nh; y++) {
+        const uint32_t fy = (uint32_t)((uint64_t)y * (h - 1U) * 256U / (nh - 1U));   /* 8.8 fixed point */
+        const uint32_t y0 = fy >> 8, y1 = (y0 + 1U < h) ? y0 + 1U : y0, wy = fy & 255U;
+        const uint16_t *r0 = in + (size_t)y0 * padded, *r1 = in + (size_t)y1 * padded;
+        uint16_t *out = dst + (size_t)y * nw;
+        for (uint32_t x = 0; x < nw; x++) {
+            const uint32_t fx = (uint32_t)((uint64_t)x * (w - 1U) * 256U / (nw - 1U));
+            const uint32_t x0 = fx >> 8, x1 = (x0 + 1U < w) ? x0 + 1U : x0, wx = fx & 255U;
+            const uint16_t p[4] = { r0[x0], r0[x1], r1[x0], r1[x1] };
+            const uint32_t k[4] = { (256U - wx) * (256U - wy), wx * (256U - wy), (256U - wx) * wy, wx * wy };
+            uint32_t r = 0, g = 0, b = 0;
+            for (int i = 0; i < 4; i++) {
+                r += ((p[i] >> 11) & 0x1FU) * k[i];
+                g += ((p[i] >> 5) & 0x3FU) * k[i];
+                b += (p[i] & 0x1FU) * k[i];
+            }
+            out[x] = (uint16_t)((((r + 32768U) >> 16) << 11) | (((g + 32768U) >> 16) << 5) | ((b + 32768U) >> 16));
+        }
+    }
+    *out_w = nw;
+    *out_h = nh;
+    *out_size = size;
+    return (uint8_t *)dst;
+}
+
+/* ---- Recent covers kept in memory ---------------------------------------
+ * The last few decoded covers (as shown: already enlarged if they needed it)
+ * stay in PSRAM, so going back to a song or a room shows its cover at once
+ * instead of downloading and decoding it again.  About 270 KB each.  Used
+ * only by the album-art task (08_now_playing.c). */
+#define ALBUM_ART_CACHE_N 8
+static struct {
+    char     key[256];
+    uint8_t *px;
+    uint32_t w, h, padded;
+    size_t   size;
+    uint32_t used;                    /* when last shown, for dropping the oldest */
+} album_art_cache[ALBUM_ART_CACHE_N];
+static char album_art_cache_store_key[256] = "";   /* set while fetching a cover worth keeping */
+
+static void album_art_cache_put(const uint8_t *px, uint32_t w, uint32_t h, uint32_t padded, size_t size)
+{
+    if (album_art_cache_store_key[0] == '\0') return;
+    int slot = 0;
+    for (int i = 0; i < ALBUM_ART_CACHE_N; i++) {
+        if (strcmp(album_art_cache[i].key, album_art_cache_store_key) == 0) { slot = i; break; }
+        if (album_art_cache[i].used < album_art_cache[slot].used) slot = i;
+    }
+    uint8_t *copy = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (copy == NULL) return;
+    memcpy(copy, px, size);
+    heap_caps_free(album_art_cache[slot].px);
+    album_art_cache[slot].px = copy;
+    album_art_cache[slot].w = w;
+    album_art_cache[slot].h = h;
+    album_art_cache[slot].padded = padded;
+    album_art_cache[slot].size = size;
+    album_art_cache[slot].used = esp_log_timestamp() | 1U;
+    snprintf(album_art_cache[slot].key, sizeof(album_art_cache[slot].key), "%s", album_art_cache_store_key);
+}
+
+/* Show a kept cover for this key; false if there isn't one. */
+static void album_art_show_job(void *arg);
+static bool album_art_cache_show(const char *key)
+{
+    for (int i = 0; i < ALBUM_ART_CACHE_N; i++) {
+        if (album_art_cache[i].px == NULL || strcmp(album_art_cache[i].key, key) != 0) continue;
+        uint8_t *copy = heap_caps_malloc(album_art_cache[i].size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (copy == NULL) return false;
+        memcpy(copy, album_art_cache[i].px, album_art_cache[i].size);
+        const album_art_msg_t m = { .pixels = copy, .w = album_art_cache[i].w, .h = album_art_cache[i].h,
+                                    .padded = album_art_cache[i].padded, .size = album_art_cache[i].size };
+        if (!ui_post(album_art_show_job, &m, sizeof(m))) {
+            heap_caps_free(copy);
+            return false;
+        }
+        album_art_cache[i].used = esp_log_timestamp() | 1U;
+        ESP_LOGI(TAG, "Album art: shown from memory");
+        return true;
+    }
+    return false;
+}
+
 static bool album_art_show(uint8_t *pixels, uint32_t w, uint32_t h, uint32_t padded, size_t size)
 {
+    uint32_t bw = 0, bh = 0;
+    size_t bsize = 0;
+    uint8_t *big = album_art_enlarge(pixels, w, h, padded, &bw, &bh, &bsize);
+    if (big != NULL) {
+        /* kept before handing over: once posted, the display task owns it */
+        album_art_cache_put(big, bw, bh, bw, bsize);
+        const album_art_msg_t m = { .pixels = big, .w = bw, .h = bh, .padded = bw, .size = bsize };
+        if (!ui_post(album_art_show_job, &m, sizeof(m))) {
+            heap_caps_free(big);
+            return false;                 /* the caller still owns (and frees) the original */
+        }
+        ESP_LOGI(TAG, "Album art: %ux%u enlarged to %ux%u", (unsigned)w, (unsigned)h,
+                 (unsigned)bw, (unsigned)bh);
+        heap_caps_free(pixels);           /* taken over: the enlarged copy is shown */
+        return true;
+    }
     const album_art_msg_t m = { .pixels = pixels, .w = w, .h = h, .padded = padded, .size = size };
+    album_art_cache_put(pixels, w, h, padded, size);       /* before: once posted, it isn't ours */
     return ui_post(album_art_show_job, &m, sizeof(m));
 }
 
@@ -392,7 +514,7 @@ static void ss_clock_apply_style(bool cover)
     const int digits_h = vis_h * sc / 256;
     const int date_h = ss_clk_date != 0 ? 22 + 48 : 0;
     const int group = digits_h + date_h;
-    int top = cover ? (330 - group) / 2 + 8 : (600 - group) / 2 - 10;
+    int top = cover ? (340 - group) / 2 : (600 - group) / 2 - 10;
     if (top < 8) top = 8;
     /* Scaling is about the row's centre; place the label so the scaled
      * digits start at `top`.  (The row has 12 px padding above the label.) */
@@ -632,6 +754,7 @@ static int screensaver_paused_view(void)
         case 2:  return SS_VIEW_ANALOG;
         case 3:  return SS_VIEW_WALL;
         case 4:  return SS_VIEW_WEATHER;
+        case 5:  return ss_have_track ? SS_VIEW_ART : SS_VIEW_CLOCK;   /* the big cover, as while playing */
         default: return SS_VIEW_CLOCK;
     }
 }
@@ -898,19 +1021,20 @@ static void create_screensaver(lv_obj_t *screen)
     lv_obj_set_style_text_letter_space(screensaver_date_label, 2, 0);
     lv_obj_set_width(screensaver_date_label, 1024);
 
-    /* The paused song: small dimmed cover and two lines of text. */
-    ss_pause_box = ss_box(ss_clock_box, 540, 100);
-    lv_obj_set_pos(ss_pause_box, (1024 - 540) / 2, 350);
+    /* The paused song under the clock: a dimmed cover (big enough to see
+     * across the room, like the Android app's) and three lines of text. */
+    ss_pause_box = ss_box(ss_clock_box, 700, 196);
+    lv_obj_set_pos(ss_pause_box, (1024 - 700) / 2, 352);
     ss_pause_img = lv_image_create(ss_pause_box);
-    lv_obj_set_size(ss_pause_img, 96, 96);
+    lv_obj_set_size(ss_pause_img, 190, 190);
     lv_image_set_inner_align(ss_pause_img, LV_IMAGE_ALIGN_STRETCH);
     lv_obj_set_style_image_recolor(ss_pause_img, lv_color_hex(0x000000), 0);
     lv_obj_set_style_image_recolor_opa(ss_pause_img, LV_OPA_40, 0);
     lv_obj_set_pos(ss_pause_img, 0, 2);
     lv_obj_add_flag(ss_pause_img, LV_OBJ_FLAG_HIDDEN);
-    ss_pause_state  = ui_text(ss_pause_box, "", &p4_font_14, UI_TEXT_DIM, 116, 12, 420);
-    ss_pause_title  = ui_text(ss_pause_box, "", &p4_font_18, UI_TEXT_SOFT, 116, 36, 420);
-    ss_pause_artist = ui_text(ss_pause_box, "", &p4_font_16, UI_TEXT_DIM, 116, 64, 420);
+    ss_pause_state  = ui_text(ss_pause_box, "", &p4_font_16, UI_TEXT_DIM, 214, 38, 486);
+    ss_pause_title  = ui_text(ss_pause_box, "", &p4_font_28, UI_TEXT_SOFT, 214, 70, 486);
+    ss_pause_artist = ui_text(ss_pause_box, "", &p4_font_18, UI_TEXT_DIM, 214, 118, 486);
     lv_obj_add_flag(ss_pause_box, LV_OBJ_FLAG_HIDDEN);
 
     /* ---- album art view ---- */
@@ -939,10 +1063,10 @@ static void create_screensaver(lv_obj_t *screen)
     lv_obj_set_pos(ss_art_bar, 532, 296);
     lv_bar_set_range(ss_art_bar, 0, 1000);
     lv_obj_set_style_bg_opa(ss_art_bar, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_radius(ss_art_bar, 3, LV_PART_MAIN);
+    lv_obj_set_style_radius(ss_art_bar, UI_R(3), LV_PART_MAIN);
     lv_obj_set_style_bg_color(ss_art_bar, lv_color_hex(UI_ACCENT), LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(ss_art_bar, LV_OPA_COVER, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(ss_art_bar, 3, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(ss_art_bar, UI_R(3), LV_PART_INDICATOR);
     lv_obj_clear_flag(ss_art_bar, LV_OBJ_FLAG_CLICKABLE);
     ss_art_elapsed = ui_text(ss_art_box, "", &p4_font_14, UI_TEXT_DIM, 532, 312, 120);
     ss_art_total   = ui_text(ss_art_box, "", &p4_font_14, UI_TEXT_DIM, 832, 312, 120);

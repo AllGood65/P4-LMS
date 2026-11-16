@@ -115,3 +115,16 @@ static void ui_call(ui_job_fn_t fn, void *ctx)
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
     }
 }
+
+/* Some background tasks keep their stacks in PSRAM, to leave the scarce
+ * internal RAM to Wi-Fi.  A task like that must never write to the flash
+ * chip itself (the PSRAM is switched off for a moment while the flash is
+ * written, stack included).  Code that saves settings and can run on such a
+ * task goes through flash_safe_call(): on a PSRAM stack the job runs on the
+ * LVGL task (internal stack) and this waits for it; otherwise it runs here. */
+static void flash_safe_call(ui_job_fn_t fn, void *ctx)
+{
+    int probe = 0;
+    if (!esp_ptr_internal(&probe)) ui_call(fn, ctx);
+    else                           fn(ctx);
+}

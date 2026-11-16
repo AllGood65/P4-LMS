@@ -14,7 +14,7 @@ A 7" touchscreen controller for whole-house music, built on a Waveshare ESP32-P4
 - **Saved playlists:** create, add to, reorder, rename, and play from any song
 - **Internet radio and apps,** including YouTube search (with Lyrion's YouTube plugin)
 - **Visualizers:** several styles driven by the built-in microphone, with adjustable sensitivity
-- **Colour themes**
+- **Colour themes:** 26 themes, including true-dark ones (Midnight, Obsidian, Ember, Aurora, Graphite). Many have their own style as well as colours: square Art Deco frames with a double gold trim, heavy Brass trim, sharp Neon outlines, each with its own title lettering
 - **Screensavers:** album art, cover wall, big text, VU meters, clocks, and weather with a 3-day forecast (Open-Meteo, no account needed); the clock has 5 fonts, 4 sizes, 12/24-hour time, date styles and colours
 - **Sleep timer and alarms** that power the amps down and up in order
 - **Web settings page:** choose which rooms to show, Home Assistant setup, power switches, weather location, time zone, settings backup/restore, and firmware updates over Wi-Fi

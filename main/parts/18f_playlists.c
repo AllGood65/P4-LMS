@@ -62,7 +62,7 @@ static void pl_cancel_event_cb(lv_event_t *e)
 static void pl_picker_create(void)
 {
     pl_picker = modal_create(lv_screen_active(), 640, 470, &pl_picker_panel);
-    ui_text(pl_picker_panel, "ADD TO PLAYLIST", &p4_font_28, UI_TEXT, 26, 18, 0);
+    ui_title(ui_text(pl_picker_panel, "ADD TO PLAYLIST", &p4_font_28, UI_TEXT, 26, 18, 0));
     pl_picker_what = ui_text(pl_picker_panel, "", &p4_font_16, UI_TEXT_SOFT, 26, 60, 0);
     lv_obj_set_width(pl_picker_what, 590);
     lv_label_set_long_mode(pl_picker_what, LV_LABEL_LONG_DOT);

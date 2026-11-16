@@ -4,6 +4,7 @@ idf_component_register(
          "fonts/p4_font_28.c" "fonts/p4_font_40.c" "fonts/p4_font_48.c"
          "fonts/p4_clock_montserrat.c" "fonts/p4_clock_oswald.c" "fonts/p4_clock_dseg7.c"
          "fonts/p4_clock_dmserif.c" "fonts/p4_clock_orbitron.c"
+         "fonts/p4_title_deco.c" "fonts/p4_title_brass.c" "fonts/p4_title_neon.c"
     INCLUDE_DIRS "."
     PRIV_REQUIRES
         esp_codec_dev

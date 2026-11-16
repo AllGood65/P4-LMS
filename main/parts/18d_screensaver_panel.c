@@ -187,9 +187,9 @@ static void ssp_create(lv_obj_t *screen)
         lv_obj_set_pos(ssp_play_btn[i], 30 + i * 174, 110);
         lv_obj_add_event_cb(ssp_play_btn[i], ssp_choice_event_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
     }
-    for (int i = 0; i < SSP_PAUSE_CHOICES; i++) {          /* six to a row: a little narrower */
-        ssp_pause_btn[i] = create_button(p, pause_names[i], 152, 46);
-        lv_obj_set_pos(ssp_pause_btn[i], 30 + i * 160, 198);
+    for (int i = 0; i < SSP_PAUSE_CHOICES; i++) {          /* six to a row: narrower, same right edge as the row above */
+        ssp_pause_btn[i] = create_button(p, pause_names[i], 134, 46);
+        lv_obj_set_pos(ssp_pause_btn[i], 30 + i * 145, 198);
         lv_obj_add_event_cb(ssp_pause_btn[i], ssp_choice_event_cb, LV_EVENT_CLICKED, (void *)(intptr_t)(i + 10));
     }
 

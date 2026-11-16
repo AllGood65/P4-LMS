@@ -150,6 +150,7 @@ static bool png_decode_rgb565_buffer(const uint8_t *png_data, size_t png_size,
  * them and must free them. */
 typedef struct { uint8_t *pixels; uint32_t w, h, padded; size_t size; } album_art_msg_t;
 static void screensaver_cover_changed(bool present);
+static void cover_theme_new_cover(void);     /* 13b_cover_theme.c */
 /* The analog clock and the cover wall live in 18e_screensavers.c. */
 static void ss_extra_create(lv_obj_t *overlay);
 static void ss_extra_show(int view);          /* shows that view's box (or none) */
@@ -593,6 +594,7 @@ static void screensaver_cover_changed(bool present)
         }
         if (n > 0) ss_art_avg = ((r / n) << 16) | ((g / n) << 8) | (b / n);
     }
+    if (ss_have_cover) cover_theme_new_cover();     /* COVER COLOURS theme: follow it */
     lv_obj_t *imgs[2] = { ss_art_img, ss_pause_img };
     for (int i = 0; i < 2; i++) {
         if (imgs[i] == NULL) continue;

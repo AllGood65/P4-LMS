@@ -21,28 +21,30 @@ static const uint8_t theme_display_order[] = {
     0,                                  /* AMBER                                        */
     16, 17,                             /* RECEIVER BLUE, BLUE METERS (hi-fi inspired)  */
     7, 8, 9, 10, 11, 12, 13, 14, 15,    /* VINTAGE ... ROSE GOLD (multi-colour)        */
+    21,                                 /* COVER COLOURS (follows the album art)        */
     18, 19, 20,                         /* PATINA, COCOA, CYBER                         */
     1, 2, 3, 4, 5, 6                    /* ICE, TEAL, PHOSPHOR, SYNTH, MONO, NIGHT      */
 };
-_Static_assert(sizeof(theme_display_order) == 21, "theme_display_order must list every theme once");
+_Static_assert(sizeof(theme_display_order) == 22, "theme_display_order must list every theme once");
 static bool      theme_applying = false;
 
 /* Read the saved theme (called once, before any screen is built). */
+static void cover_theme_init(void);   /* 13b_cover_theme.c */
 static void ui_theme_load(void)
 {
     nvs_handle_t nvs;
     uint8_t value = 0;
+    esp_err_t ret = ESP_FAIL;
 
-    if (nvs_open(PLAYER_NVS_NAMESPACE, NVS_READONLY, &nvs) != ESP_OK) {
-        return;
+    if (nvs_open(PLAYER_NVS_NAMESPACE, NVS_READONLY, &nvs) == ESP_OK) {
+        ret = nvs_get_u8(nvs, THEME_NVS_KEY, &value);
+        nvs_close(nvs);
     }
-    esp_err_t ret = nvs_get_u8(nvs, THEME_NVS_KEY, &value);
-    nvs_close(nvs);
-
-    if (ret == ESP_OK && (int)value < UI_THEME_COUNT) {
-        ui_theme = &ui_themes[value];
-        ESP_LOGI(TAG, "Theme: %s", ui_theme->name);
-    }
+    ui_theme_index = (ret == ESP_OK && (int)value < UI_THEME_COUNT) ? (int)value : 0;
+    ui_theme_live = ui_themes[ui_theme_index];
+    ui_theme = &ui_theme_live;
+    if (ui_theme_index == UI_THEME_COVER) cover_theme_init();   /* its starting colours */
+    ESP_LOGI(TAG, "Theme: %s", ui_theme->name);
 }
 
 static bool ui_theme_save(int index)
@@ -157,7 +159,7 @@ static void settings_build_cards(void)
     for (int pos = 0; pos < UI_THEME_COUNT; pos++) {
         const int i = theme_display_order[pos];
         const ui_theme_t *t = &ui_themes[i];
-        const bool current = (t == ui_theme);
+        const bool current = (i == ui_theme_index);
 
         lv_obj_t *btn = lv_obj_create(settings_list);
         lv_obj_remove_style_all(btn);
@@ -266,7 +268,7 @@ static void theme_button_event_cb(lv_event_t *e)
     const int index = (int)(intptr_t)lv_event_get_user_data(e);
     if (index < 0 || index >= UI_THEME_COUNT) return;
 
-    if (&ui_themes[index] == ui_theme) {      /* already the active theme */
+    if (index == ui_theme_index) {            /* already the active theme */
         settings_hide();
         return;
     }

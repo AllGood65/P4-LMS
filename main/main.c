@@ -97,6 +97,7 @@ static void *cjson_psram_malloc(size_t n)
 #include "parts/11_transport_controls.c"
 #include "parts/12_source_browser_core.c"
 #include "parts/13_settings_themes.c"
+#include "parts/13b_cover_theme.c"
 #include "parts/14_power_and_browser_rows.c"
 #include "parts/15_queue_save_and_browser_query.c"
 #include "parts/16_wifi_picker.c"
